@@ -136,6 +136,11 @@ void setMotorPWM(int new_PWM, int pin_a, int pin_b)
 #include "robot.h"
 
 robot_t robot;
+// Toggle acceleration limiting behavior: set to 'true' to apply
+// smooth ramps using robot.accelerationLimit(), or 'false' for
+// immediate assignment (current default behavior).
+// Enable acceleration limiting by default to smoothly ramp to small speeds.
+bool ENABLE_ACCEL_LIMIT = true;
 
 // Remote commands
 
@@ -163,6 +168,8 @@ void process_command(frame_data_t frame)
   } else if (frame.command_is("w")) { 
     robot.w_req = frame.value;    
 
+  } else if (frame.command_is("accel")) { // Toggle acceleration limiting at runtime: accel 1 or accel 0
+    ENABLE_ACCEL_LIMIT = (frame.value != 0.0);
   } else if (frame.command_is("kf")) { 
     robot.PID1.Kf = frame.value;    
     robot.PID2.Kf = frame.value;    
@@ -209,6 +216,12 @@ void setup()
   robot.dt = 1e-3 * interval; // In seconds
   robot.PID1.dt = robot.dt;
   robot.PID2.dt = robot.dt;
+
+  // Default to PID closed-loop mode and a small target speed (meters/second)
+  // so you can test PID control at low speed. Adjust as needed.
+  robot.control_mode = cm_pid;
+  robot.v_req = 0.1; // small forward speed (m/s)
+  robot.w_req = 0.0;  // no rotation
 }
 
 void loop() 
@@ -239,16 +252,28 @@ void loop()
       robot.odometry();
       robot.battery_voltage = 7.4; // it really shoud be measured...
 
-      // Control the robot here by choosing:
-      //   v_req and w_req          when robot.control_mode = cm_pid
-      //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
-      // ...
 
-      // Calc outputs
+
+      // Control the robot here by choosing:
+      //   - set `v_req` and `w_req` when robot.control_mode == cm_pid
+      //   - set `PWM_1_req` and `PWM_2_req` when robot.control_mode == cm_pwm
+      // Examples (edit or uncomment to use):
+      //  robot.v_req = 0.2;     // linear speed [m/s]
+      //  robot.w_req = 0.0;     // angular speed [rad/s]
+      //  robot.PWM_1_req = 120; // direct PWM (only used in cm_pwm)
+      //  robot.PWM_2_req = 120; // direct PWM (only used in cm_pwm)
+
+      // Apply the chosen setpoints to the robot model
       robot.setRobotVW(robot.v_req, robot.w_req);
-      //robot.accelerationLimit();
-      robot.v = robot.v_req;
-      robot.w = robot.w_req;
+
+      // Use acceleration limiting if enabled, otherwise apply immediately.
+      if (ENABLE_ACCEL_LIMIT) {
+        robot.accelerationLimit();
+      } else {
+        robot.v = robot.v_req;
+        robot.w = robot.w_req;
+      }
+
       robot.VWToMotorsVoltage();
 
       setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
