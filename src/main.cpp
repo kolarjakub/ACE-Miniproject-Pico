@@ -5,11 +5,6 @@
 #include <Arduino.h>
 #include <RPi_Pico_TimerInterrupt.h>
 //#include <Wire.h>
-#include <Adafruit_VL53L0X.h>
-//#include <MPU6050.h>¨
-#include <VectorXf.h>
-#include "MPU6500_Raw.h"
-#include <MadgwickAHRS.h>
 #include "PID.h"
 
 // Select the timer you're using, from ITimer0(0)-ITimer3(3)
@@ -37,21 +32,6 @@ RPI_PICO_Timer ITimer1(1);
 #define IMU_SDA_pin 14
 
 #define TEST_PIN 2
-
-typedef struct{
-  Adafruit_VL53L0X lox;
-  VL53L0X_RangingMeasurementData_t measure;
-  bool outOfRange;
-  uint16_t distance;
-}laser_ranging_sensor_t;
-
-typedef struct{
-  Vec3f w;
-  Vec3f a;
-  uint32_t cycle_time, last_cycle_time; // IMU cycle tracking
-  float roll, pitch, yaw;  // Euler angles from Madgwick filter
-}imu_t;
-
 
 volatile int encoder1_pos = 0;
 volatile int encoder2_pos = 0;
@@ -281,11 +261,13 @@ void setup()
   Wire.setSDA(LASER_RANGING_SDA_pin);
   Wire.setSCL(LASER_RANGING_SCL_pin);
   Wire.begin();
-    
+  
+  // Initialize the laser ranging sensor
   if (!laser_ranging_sensor.lox.begin()) {
       Serial.println("Failed to initialize VL53L0X - continuing anyway");
   } else {
        Serial.println("VL53L0X initialized successfully");
+       laser_ranging_sensor.lox.setMeasurementTimingBudgetMicroSeconds(50000);
   }
 
   serial_commands.init(process_command);

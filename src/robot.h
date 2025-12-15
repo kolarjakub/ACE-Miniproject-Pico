@@ -32,12 +32,33 @@
 #include <Arduino.h>
 #include <math.h>
 #include "PID.h"
+#include <Adafruit_VL53L0X.h>
+//#include <MPU6050.h>¨
+#include <VectorXf.h>
+#include "MPU6500_Raw.h"
+#include <MadgwickAHRS.h>
 
 
 typedef enum { 
   cm_pwm,
   cm_pid
 } control_mode_t;
+
+typedef struct{
+  Adafruit_VL53L0X lox;
+  VL53L0X_RangingMeasurementData_t measure;
+  bool outOfRange;
+  uint16_t distance;
+}laser_ranging_sensor_t;
+
+typedef struct{
+  Vec3f w;
+  Vec3f a;
+  uint32_t cycle_time, last_cycle_time;
+  uint32_t dt; // IMU cycle tracking
+  float roll, pitch, yaw;  // Euler angles from Madgwick filter
+}imu_t;
+
 
 class robot_t {
   public:
@@ -72,7 +93,8 @@ class robot_t {
   void odometry(void);
   void setRobotVW(float Vnom, float Wnom);
 
-  void IMUcalib(void);
+  void IMURead(MPU6500 mpu, imu_t &imu);
+  void LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_sensor);
 
   void accelerationLimit(void);
   void VWToMotorsVoltage(void);

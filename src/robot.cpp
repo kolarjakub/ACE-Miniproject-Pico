@@ -112,8 +112,35 @@ void robot_t::VWToMotorsVoltage(void)
   }
 }
 
-void robot_t::IMUcalib(void)
+void robot_t::IMURead(MPU6500 mpu, imu_t &imu)
 {
-  
+  if(mpu.update())
+  {
+    unsigned long calib_start = millis();
+    imu.dt = (calib_start - imu.cycle_time) * 1e-6; // seconds
+    imu.cycle_time = calib_start;
+
+    imu.w.x = mpu.getGyroX();
+    imu.w.y = mpu.getGyroY();
+    imu.w.z = mpu.getGyroZ();
+
+    imu.a.x = mpu.getAccX();
+    imu.a.y = mpu.getAccY();
+    imu.a.z = mpu.getAccZ();
+
+  }
 }
 
+void robot_t::LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_sensor)
+{
+  laser_ranging_sensor.lox.rangingTest(&laser_ranging_sensor.measure, false);
+  if (laser_ranging_sensor.measure.RangeStatus != 4) { // if completely out of range / bad signal
+        Serial.print("Distance: ");
+        Serial.print(laser_ranging_sensor.measure.RangeMilliMeter);
+        Serial.println(" mm");
+        // možná později přidat proměnou pro ukládání posledních hodnot
+    } else {
+        Serial.println("Out of range");
+    }
+
+}
