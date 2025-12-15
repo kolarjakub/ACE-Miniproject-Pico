@@ -144,3 +144,18 @@ void robot_t::LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_senso
     }
 
 }
+
+void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
+{
+  // Read raw values from IR sensors
+  infrared_sensors.ir_raw[0] = analogRead(infrared_sensors.pins[0]);
+  infrared_sensors.ir_raw[1] = analogRead(infrared_sensors.pins[1]);
+  infrared_sensors.ir_raw[2] = analogRead(infrared_sensors.pins[2]);
+  infrared_sensors.ir_raw[3] = analogRead(infrared_sensors.pins[3]);
+  infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
+
+  // Convert to digital values based on threshold
+  for (int i = 0; i < 5; i++) {
+      infrared_sensors.ir_digital[i] = (infrared_sensors.ir_raw[i] > infrared_sensors.ir_treshold) ? 1 : 0;
+  }
+}

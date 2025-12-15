@@ -59,6 +59,12 @@ typedef struct{
   float roll, pitch, yaw;  // Euler angles from Madgwick filter
 }imu_t;
 
+typedef struct{
+  uint16_t ir_raw[5]; // IR sensorů
+  uint8_t ir_digital[5]; // Digitální hodnoty IR senzorů (přes prahovou hodnotu)
+  const int ir_treshold = 500; // Záleží na odstínu čáry, NASTAVIT !!!
+  uint8_t pins[5];
+} infrared_sensor_t;
 
 class robot_t {
   public:
@@ -95,6 +101,7 @@ class robot_t {
 
   void IMURead(MPU6500 mpu, imu_t &imu);
   void LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_sensor);
+  void InfraredSensorsRead(infrared_sensor_t &infrared_sensors);
 
   void accelerationLimit(void);
   void VWToMotorsVoltage(void);

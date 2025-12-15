@@ -149,11 +149,16 @@ void setMotorPWM(int new_PWM, int pin_a, int pin_b)
 
 
 #include "robot.h"
+#include "fsm.h"
 
 MPU6500 mpu;
 imu_t imu;
 laser_ranging_sensor_t laser_ranging_sensor;
+infrared_sensor_t infrared_sensors = {
+    .pins = {IR1_pin, IR2_pin, IR3_pin, IR4_pin, IR5_pin}
+};
 robot_t robot;
+fsm robotFSM;
 
 // Remote commands
 
@@ -285,87 +290,98 @@ void setup()
 
 void loop() 
 {
-    uint8_t b;
-    if (Serial.available()) {  // Only do this if there is serial data to be read
+  uint8_t b;
+  if (Serial.available()) {  // Only do this if there is serial data to be read
    
-      b = Serial.read();    
-      serial_commands.process_char(b);
-    }  
+    b = Serial.read();    
+    serial_commands.process_char(b);
+  }  
 
+  // To measure the time between loop() calls
+  //unsigned long last_loop_micros = loop_micros; 
+  
+  // Do this only every "interval" miliseconds 
+  // It helps to clear the switches bounce effect
+  unsigned long now = millis();
+  if (now - last_cycle > interval) {
+    loop_micros = micros();
+    //last_cycle = now;
+    last_cycle += interval;
 
-    // To measure the time between loop() calls
-    //unsigned long last_loop_micros = loop_micros; 
-    
-    // Do this only every "interval" miliseconds 
-    // It helps to clear the switches bounce effect
-    unsigned long now = millis();
-    if (now - last_cycle > interval) {
-      loop_micros = micros();
-      //last_cycle = now;
-      last_cycle += interval;
+    // Read and process sensors
+    read_encoders();
+    robot.enc1 = enc1;
+    robot.enc2 = enc2;
+    robot.odometry();
+    robot.battery_voltage = 7.4; // it really shoud be measured...
 
-      // Read and process sensors
-      read_encoders();
-      robot.enc1 = enc1;
-      robot.enc2 = enc2;
-      robot.odometry();
-      robot.battery_voltage = 7.4; // it really shoud be measured...
+    // Control the robot here by choosing:
+    //   v_req and w_req          when robot.control_mode = cm_pid
+    //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
+    // ...
 
-      // Control the robot here by choosing:
-      //   v_req and w_req          when robot.control_mode = cm_pid
-      //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
-      // ...
+    // Calc outputs
+    robot.setRobotVW(robot.v_req, robot.w_req);
+    //robot.accelerationLimit();
 
-      // Calc outputs
-      robot.setRobotVW(robot.v_req, robot.w_req);
-      //robot.accelerationLimit();
-      robot.v = robot.v_req;
-      robot.w = robot.w_req;
-      robot.VWToMotorsVoltage();
+    robot.v = robot.v_req;
+    robot.w = robot.w_req;
+    robot.VWToMotorsVoltage();
 
-      setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
-      setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
+    setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
+    setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
 
-      // Debug information
-      Serial.print(" M1: ");
-      Serial.print(robot.PWM_1);
+    // ================= FSM handling ===================== //
+    /*
+    switch (robotFSM.getState())
+    {
+      case State::IDLE:
+        break;
 
-      Serial.print(" M2: ");
-      Serial.print(robot.PWM_2);
-            
-      // Serial.print(" cnt: ");
-      // Serial.print(act_count);
+      case State::CALIBRATION_IMU:
+        break;
 
-      // Serial.print(" e1: ");
-      // Serial.print(enc1);
+      case State::LINE_FOLLOW:
+        break;
 
-      // Serial.print(" e2: ");
-      // Serial.print(enc2);
+      case State::ROTATE:
+        break;
 
-      Serial.print(" v1e: ");
-      Serial.print(robot.v1e);
-
-      Serial.print(" v2e: ");
-      Serial.print(robot.v2e);
-
-      Serial.print(" v1ref: ");
-      Serial.print(robot.v1ref);
-
-      Serial.print(" v2ref: ");
-      Serial.print(robot.v2ref);
-
-      Serial.print(" v_req: ");
-      Serial.print(robot.v_req);
-
-      Serial.print(" mode: ");
-      Serial.print(robot.control_mode);
-
-      Serial.print(" cmd: ");
-      Serial.print(serial_commands.frame.command);
-
-      Serial.print(" loop: ");
-      Serial.println(micros() - loop_micros);
     }
+    */
+    // ================= End of FSM handling ===================== //
+
+    // Debug information
+    
+    Serial.print(" M1: ");
+    Serial.print(robot.PWM_1);
+    Serial.print(" M2: ");
+    Serial.print(robot.PWM_2);
+          
+    // Serial.print(" cnt: ");
+    // Serial.print(act_count);
+    // Serial.print(" e1: ");
+    // Serial.print(enc1);
+    // Serial.print(" e2: ");
+    // Serial.print(enc2);
+    Serial.print(" v1e: ");
+    Serial.print(robot.v1e);
+    Serial.print(" v2e: ");
+    Serial.print(robot.v2e);
+    Serial.print(" v1ref: ");
+    Serial.print(robot.v1ref);
+    Serial.print(" v2ref: ");
+    Serial.print(robot.v2ref);
+    Serial.print(" v_req: ");
+    Serial.print(robot.v_req);
+    Serial.print(" mode: ");
+    Serial.print(robot.control_mode);
+    Serial.print(" cmd: ");
+    Serial.print(serial_commands.frame.command);
+    Serial.print(" loop: ");
+    Serial.println(micros() - loop_micros);
+
+  }
     
 }
 
