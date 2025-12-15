@@ -112,3 +112,8 @@ void robot_t::VWToMotorsVoltage(void)
   }
 }
 
+void robot_t::IMUcalib(void)
+{
+  
+}
+

@@ -72,6 +72,8 @@ class robot_t {
   void odometry(void);
   void setRobotVW(float Vnom, float Wnom);
 
+  void IMUcalib(void);
+
   void accelerationLimit(void);
   void VWToMotorsVoltage(void);
 };

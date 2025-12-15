@@ -4,6 +4,13 @@
 
 #include <Arduino.h>
 #include <RPi_Pico_TimerInterrupt.h>
+//#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
+//#include <MPU6050.h>¨
+#include <VectorXf.h>
+#include "MPU6500_Raw.h"
+#include <MadgwickAHRS.h>
+#include "PID.h"
 
 // Select the timer you're using, from ITimer0(0)-ITimer3(3)
 // Init RPI_PICO_Timer
@@ -15,8 +22,36 @@ RPI_PICO_Timer ITimer1(1);
 #define ENC2_A 9
 #define ENC2_B 8
 
+#define IR1_pin 22
+#define IR2_pin A0  //GPIO26
+#define IR3_pin A1  //GPIO27
+#define IR4_pin A2  //GPIO28
+#define IR5_pin 19
+
+// Laser ranging sensor I2C0 pins:
+#define LASER_RANGING_SCL_pin 21
+#define LASER_RANGING_SDA_pin 20 
+
+// IMU I2C pins: I2C1
+#define IMU_SCL_pin 15
+#define IMU_SDA_pin 14
 
 #define TEST_PIN 2
+
+typedef struct{
+  Adafruit_VL53L0X lox;
+  VL53L0X_RangingMeasurementData_t measure;
+  bool outOfRange;
+  uint16_t distance;
+}laser_ranging_sensor_t;
+
+typedef struct{
+  Vec3f w;
+  Vec3f a;
+  uint32_t cycle_time, last_cycle_time; // IMU cycle tracking
+  float roll, pitch, yaw;  // Euler angles from Madgwick filter
+}imu_t;
+
 
 volatile int encoder1_pos = 0;
 volatile int encoder2_pos = 0;
@@ -135,6 +170,9 @@ void setMotorPWM(int new_PWM, int pin_a, int pin_b)
 
 #include "robot.h"
 
+MPU6500 mpu;
+imu_t imu;
+laser_ranging_sensor_t laser_ranging_sensor;
 robot_t robot;
 
 // Remote commands
@@ -181,6 +219,13 @@ void process_command(frame_data_t frame)
 
 void setup() 
 {
+  Serial.begin(115200);
+  int start = millis();
+  while (millis() - start < 4000) {
+    // wait for serial port to connect. Needed for native USB
+  }
+
+  Serial.println("FSM Init: Starting setup...");
   // Set the pins as input or output as needed
   pinMode(ENC1_A, INPUT_PULLUP);
   pinMode(ENC1_B, INPUT_PULLUP);
@@ -195,17 +240,62 @@ void setup()
   pinMode(MOTOR2A_PIN, OUTPUT);
   pinMode(MOTOR2B_PIN, OUTPUT);
 
-  serial_commands.init(process_command);
+  delay(100);
+  Serial.println("FSM Init: Starting GPIO setup...");
+  //Serial.flush();
+  // Initialize peripherals pins
+  // Line sensors
+  pinMode(IR1_pin, INPUT);
+  pinMode(IR2_pin, INPUT);
+  pinMode(IR3_pin, INPUT);
+  pinMode(IR4_pin, INPUT);
+  pinMode(IR5_pin, INPUT);
 
-  // Start the serial port with 115200 baudrate
-  Serial.begin(115200);
+  Serial.println("FSM Init: Motor PWM pins configured");
+  // IMU MPU6500
+  Serial.println("FSM Init: Starting IMU initialization...");
+  pinMode(IMU_SDA_pin, INPUT_PULLUP);
+  pinMode(IMU_SCL_pin, INPUT_PULLUP);
+  Wire1.setSDA(IMU_SDA_pin);
+  Wire1.setSCL(IMU_SCL_pin);
+  Wire1.begin();
+  MPU6500Setting setting;
+  setting.accel_fs_sel = ACCEL_FS_SEL::A16G;
+  setting.gyro_fs_sel = GYRO_FS_SEL::G2000DPS;
+  setting.fifo_sample_rate = FIFO_SAMPLE_RATE::SMPL_200HZ;
+  setting.gyro_fchoice = 0x03;
+  setting.gyro_dlpf_cfg = GYRO_DLPF_CFG::DLPF_41HZ;
+  setting.accel_fchoice = 0x01;
+  setting.accel_dlpf_cfg = ACCEL_DLPF_CFG::DLPF_45HZ;
+  
+  if(!mpu.setup(0x68, setting)) {
+      Serial.println("MPU connection failed - continuing anyway");
+  } else {
+      Serial.println("MPU initialized successfully");
+  }
+
+    // Laser Ranging Sensor
+  Serial.println("FSM Init: Starting VL53L0X initialization...");
+  pinMode(LASER_RANGING_SCL_pin, INPUT_PULLUP);
+  pinMode(LASER_RANGING_SDA_pin, INPUT_PULLUP);
+  Wire.setSDA(LASER_RANGING_SDA_pin);
+  Wire.setSCL(LASER_RANGING_SCL_pin);
+  Wire.begin();
+    
+  if (!laser_ranging_sensor.lox.begin()) {
+      Serial.println("Failed to initialize VL53L0X - continuing anyway");
+  } else {
+       Serial.println("VL53L0X initialized successfully");
+  }
+
+  serial_commands.init(process_command);
 
   if (ITimer1.attachInterrupt(40000, timer_handler))
     Serial.println("Starting ITimer OK, millis() = " + String(millis()));
   else
     Serial.println("Can't set ITimer. Select another freq. or timer");
 
-  interval = 40;             // In miliseconds
+  interval = 500;             // In miliseconds
   robot.dt = 1e-3 * interval; // In seconds
   robot.PID1.dt = robot.dt;
   robot.PID2.dt = robot.dt;
