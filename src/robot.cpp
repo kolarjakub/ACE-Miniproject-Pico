@@ -168,12 +168,10 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   }
   Serial.println();
 
-  // Print digital values on one line (indices: 0,1,2,3,4)
+  // Print digital values on one line (indices: 0,1,2,3,5)
   Serial.print("IR digital: ");
-  int _ir_idx[] = {0,1,2,3,4};
   for (int k = 0; k < 5; k++) {
-    int i = _ir_idx[k];
-    Serial.print(infrared_sensors.ir_digital[i]);
+    Serial.print(infrared_sensors.ir_digital[k]);
     if (k < 4) Serial.print(" ");
   }
   Serial.println();

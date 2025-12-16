@@ -329,26 +329,15 @@ void loop()
     //   v_req and w_req          when robot.control_mode = cm_pid
     //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
     // ...
-    robot.IMURead(mpu, imu);
-    robot.InfraredSensorsRead(infrared_sensors);
-    robot.LaserRangingSensorRead(laser_ranging_sensor);
 
-    // Calc outputs
-    robot.setRobotVW(robot.v_req, robot.w_req);
-    //robot.accelerationLimit();
-
-    robot.v = robot.v_req;
-    robot.w = robot.w_req;
-    robot.VWToMotorsVoltage();
-
-    setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
-    setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
 
     // ================= FSM handling ===================== //
-    /*
-    switch (robotFSM.getState())
+    
+    switch (robotFSM.currentState)
     {
       case State::IDLE:
+
+        robotFSM.newState = State::LINE_FOLLOW;
         break;
 
       case State::CALIBRATION_IMU:
@@ -361,8 +350,23 @@ void loop()
         break;
 
     }
-    */
+    
     // ================= End of FSM handling ===================== //
+
+
+        // Calc outputs
+    robot.setRobotVW(robot.v_req, robot.w_req);
+    //robot.accelerationLimit();
+
+    robot.v = robot.v_req;
+    robot.w = robot.w_req;
+    robot.VWToMotorsVoltage();
+
+    setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
+    setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
+
+    robotFSM.updateTisTes();
+    robotFSM.setState(robotFSM.newState);
 
     // Debug information
     

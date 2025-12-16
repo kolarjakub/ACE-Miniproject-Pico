@@ -1,36 +1,19 @@
 #include "fsm.h"
 
-void fsm::setState(State newState){
-    if(currentState != newState){
-        previousState = currentState;
-        currentState = newState;
-    }
+void fsm::setState(State anewState){
+  if (currentState != anewState) {  // if the state chnaged tis is reset
+    currentState = anewState;
+    tes = millis();
+    tis = 0;
+  }
 }
+
+void fsm::updateTisTes(){
+  uint32_t cur_time = millis();   // Just one call to millis()
+  tis = cur_time - tes;
+}
+
 
 State fsm::getState() const {
     return currentState;
-}
-
-State fsm::getPreviousState() const {
-    return previousState;
-}
-
-bool fsm::isState(State state) const {
-    return currentState == state;
-}
-
-void fsm::toCalibrationIMU(MPU6500 mpu, imu_t &imu){
-    setState(State::CALIBRATION_IMU);
-}
-
-void fsm::toLineFollow(){
-    setState(State::LINE_FOLLOW);
-}
-
-void fsm::toRotate(){
-    setState(State::ROTATE);
-}
-
-void fsm::toIdle(){
-    setState(State::IDLE);
 }

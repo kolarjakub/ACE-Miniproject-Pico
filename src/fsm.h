@@ -15,22 +15,20 @@ enum class State
 class fsm
 {
 private:
-    State currentState;
-    State previousState;
+
 
 public:
-    fsm() : currentState(State::IDLE), previousState(State::IDLE){}
-    
-    void setState(State newState);
+
+    State currentState;
+    State newState;
+    unsigned long tes, tis;
+
+    fsm() : currentState(State::IDLE), newState(State::IDLE) {}
+
+    void setState(State anewState);
+    void updateTisTes();
     State getState() const;
-    State getPreviousState() const;
 
-    bool isState(State state) const;
-
-    void toIdle();
-    void toCalibrationIMU(MPU6500 mpu, imu_t &imu);
-    void toLineFollow();
-    void toRotate();
 };
 
 #endif // FSM_H
