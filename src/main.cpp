@@ -158,7 +158,7 @@ infrared_sensor_t infrared_sensors = {
     .pins = {IR1_pin, IR2_pin, IR3_pin, IR4_pin, IR5_pin}
 };
 robot_t robot;
-fsm robotFSM;
+fsm FSM;
 
 // Remote commands
 
@@ -333,11 +333,11 @@ void loop()
 
     // ================= FSM handling ===================== //
     
-    switch (robotFSM.currentState)
+    switch (FSM.currentState)
     {
       case State::IDLE:
 
-        robotFSM.newState = State::LINE_FOLLOW;
+        FSM.newState = State::LINE_FOLLOW;
         break;
 
       case State::CALIBRATION_IMU:
@@ -365,11 +365,13 @@ void loop()
     setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
     setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
 
-    robotFSM.updateTisTes();
-    robotFSM.setState(robotFSM.newState);
+    FSM.updateTisTes();
+    FSM.setState(FSM.newState);
 
     // Debug information
-    
+    Serial.print(" currentState: ");
+    //Serial.println(FSM.currentState);
+
     Serial.print(" M1: ");
     Serial.print(robot.PWM_1);
     Serial.print(" M2: ");
