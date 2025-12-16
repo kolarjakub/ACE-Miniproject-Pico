@@ -157,7 +157,7 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
 
   // Convert analog to digital values based on threshold
   for (int i = 1; i < 4; i++) {
-      infrared_sensors.ir_digital[i] = (infrared_sensors.ir_raw[i] > infrared_sensors.ir_treshold) ? 1 : 0;
+      infrared_sensors.ir_digital[i] = (infrared_sensors.ir_raw[i] < infrared_sensors.ir_treshold) ? 1 : 0;
   }
   
   // Print analog values on one line

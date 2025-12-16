@@ -28,7 +28,7 @@ public:
     void setState(State anewState);
     void updateTisTes();
     State getState() const;
-
+    const char* getStateName() const;
 };
 
 #endif // FSM_H

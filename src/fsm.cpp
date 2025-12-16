@@ -17,3 +17,15 @@ void fsm::updateTisTes(){
 State fsm::getState() const {
     return currentState;
 }
+
+const char* fsm::getStateName() const
+{
+    switch (currentState)
+    {
+        case State::IDLE:            return "IDLE";
+        case State::CALIBRATION_IMU: return "CALIBRATION_IMU";
+        case State::LINE_FOLLOW:     return "LINE_FOLLOW";
+        case State::ROTATE:          return "ROTATE";
+        default:                     return "UNKNOWN";
+    }
+}

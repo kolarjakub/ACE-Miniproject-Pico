@@ -287,7 +287,7 @@ void setup()
   else
     Serial.println("Can't set ITimer. Select another freq. or timer");
 
-  interval = 500;             // In miliseconds
+  interval = 40;             // In miliseconds
   robot.dt = 1e-3 * interval; // In seconds
   robot.PID1.dt = robot.dt;
   robot.PID2.dt = robot.dt;
@@ -336,11 +336,12 @@ void loop()
     switch (FSM.currentState)
     {
       case State::IDLE:
-
-        FSM.newState = State::LINE_FOLLOW;
+        FSM.newState = State::CALIBRATION_IMU;
         break;
 
       case State::CALIBRATION_IMU:
+        mpu.calibrateAccelGyro();
+        FSM.newState = State::LINE_FOLLOW;
         break;
 
       case State::LINE_FOLLOW:
@@ -353,8 +354,11 @@ void loop()
     
     // ================= End of FSM handling ===================== //
 
+    FSM.updateTisTes();
+    FSM.setState(FSM.newState);
 
-        // Calc outputs
+
+    // Calc outputs
     robot.setRobotVW(robot.v_req, robot.w_req);
     //robot.accelerationLimit();
 
@@ -365,12 +369,10 @@ void loop()
     setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
     setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
 
-    FSM.updateTisTes();
-    FSM.setState(FSM.newState);
 
     // Debug information
     Serial.print(" currentState: ");
-    //Serial.println(FSM.currentState);
+    Serial.println(FSM.getStateName());
 
     Serial.print(" M1: ");
     Serial.print(robot.PWM_1);
