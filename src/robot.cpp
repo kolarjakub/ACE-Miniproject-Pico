@@ -153,7 +153,7 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   infrared_sensors.ir_raw[2] = analogRead(infrared_sensors.pins[2]);
   infrared_sensors.ir_raw[3] = analogRead(infrared_sensors.pins[3]);
   //infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
-  infrared_sensors.ir_digital[5] = digitalRead(infrared_sensors.pins[5]);
+  infrared_sensors.ir_digital[4] = digitalRead(infrared_sensors.pins[4]);
 
   // Convert analog to digital values based on threshold
   for (int i = 1; i < 4; i++) {
@@ -168,9 +168,9 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   }
   Serial.println();
 
-  // Print digital values on one line (indices: 0,1,2,3,5)
+  // Print digital values on one line (indices: 0,1,2,3,4)
   Serial.print("IR digital: ");
-  int _ir_idx[] = {0,1,2,3,5};
+  int _ir_idx[] = {0,1,2,3,4};
   for (int k = 0; k < 5; k++) {
     int i = _ir_idx[k];
     Serial.print(infrared_sensors.ir_digital[i]);

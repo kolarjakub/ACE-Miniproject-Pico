@@ -4,7 +4,7 @@
 
 #include <Arduino.h>
 #include <RPi_Pico_TimerInterrupt.h>
-//#include <Wire.h>
+#include <Wire.h>
 #include "PID.h"
 
 // Select the timer you're using, from ITimer0(0)-ITimer3(3)
@@ -21,15 +21,15 @@ RPI_PICO_Timer ITimer1(1);
 #define IR2_pin A0  //GPIO26
 #define IR3_pin A1  //GPIO27
 #define IR4_pin A2  //GPIO28
-#define IR5_pin 19
+#define IR5_pin 18
 
 // Laser ranging sensor I2C0 pins:
-#define LASER_RANGING_SCL_pin 21
-#define LASER_RANGING_SDA_pin 20 
+//#define LASER_RANGING_SCL_pin 15
+//#define LASER_RANGING_SDA_pin 14
 
-// IMU I2C pins: I2C1
-#define IMU_SCL_pin 15
-#define IMU_SDA_pin 14
+// IMU I2C pins: I2C0
+#define SDA_pin 20
+#define SCL_pin 21
 
 #define TEST_PIN 2
 
@@ -239,11 +239,21 @@ void setup()
   Serial.println("FSM Init: Motor PWM pins configured");
   // IMU MPU6500
   Serial.println("FSM Init: Starting IMU initialization...");
-  pinMode(IMU_SDA_pin, INPUT_PULLUP);
-  pinMode(IMU_SCL_pin, INPUT_PULLUP);
-  Wire1.setSDA(IMU_SDA_pin);
-  Wire1.setSCL(IMU_SCL_pin);
-  Wire1.begin();
+  pinMode(SDA_pin, INPUT_PULLUP);
+  pinMode(SCL_pin, INPUT_PULLUP);
+  Wire.setSDA(SDA_pin);
+  Wire.setSCL(SCL_pin);
+  Wire.begin();
+
+  Serial.println("Scanning I2C bus...");
+  for (byte i = 1; i < 127; i++) {
+    Wire.beginTransmission(i);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("Found I2C device at 0x");
+      Serial.println(i, HEX);
+    }
+  }
+
   MPU6500Setting setting;
   setting.accel_fs_sel = ACCEL_FS_SEL::A16G;
   setting.gyro_fs_sel = GYRO_FS_SEL::G2000DPS;
@@ -261,12 +271,7 @@ void setup()
 
     // Laser Ranging Sensor
   Serial.println("FSM Init: Starting VL53L0X initialization...");
-  pinMode(LASER_RANGING_SCL_pin, INPUT_PULLUP);
-  pinMode(LASER_RANGING_SDA_pin, INPUT_PULLUP);
-  Wire.setSDA(LASER_RANGING_SDA_pin);
-  Wire.setSCL(LASER_RANGING_SCL_pin);
-  Wire.begin();
-  
+
   // Initialize the laser ranging sensor
   if (!laser_ranging_sensor.lox.begin()) {
       Serial.println("Failed to initialize VL53L0X - continuing anyway");
@@ -324,7 +329,9 @@ void loop()
     //   v_req and w_req          when robot.control_mode = cm_pid
     //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
     // ...
-
+    robot.IMURead(mpu, imu);
+    robot.InfraredSensorsRead(infrared_sensors);
+    robot.LaserRangingSensorRead(laser_ranging_sensor);
 
     // Calc outputs
     robot.setRobotVW(robot.v_req, robot.w_req);
@@ -363,6 +370,19 @@ void loop()
     Serial.print(robot.PWM_1);
     Serial.print(" M2: ");
     Serial.print(robot.PWM_2);
+
+    Serial.print(" IMU_gyroscope X: ");
+    Serial.print(imu.w.x);
+    Serial.print(" Y: ");
+    Serial.print(imu.w.y);
+    Serial.print(" Z: ");
+    Serial.print(imu.w.z);
+    Serial.print(" IMU_accelerrometer X: ");
+    Serial.print(imu.a.x);
+    Serial.print(" Y: ");
+    Serial.print(imu.a.y);
+    Serial.print(" Z: ");
+    Serial.print(imu.a.z);
           
     // Serial.print(" cnt: ");
     // Serial.print(act_count);

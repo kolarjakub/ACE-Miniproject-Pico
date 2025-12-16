@@ -19,7 +19,7 @@ private:
     State previousState;
 
 public:
-    fsm(){}
+    fsm() : currentState(State::IDLE), previousState(State::IDLE){}
     
     void setState(State newState);
     State getState() const;

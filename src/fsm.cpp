@@ -1,7 +1,5 @@
 #include "fsm.h"
 
-fsm::fsm() : currentState(State::IDLE), previousState(State::IDLE){}
-
 void fsm::setState(State newState){
     if(currentState != newState){
         previousState = currentState;
