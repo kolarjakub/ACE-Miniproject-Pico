@@ -134,9 +134,9 @@ void robot_t::LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_senso
 {
   laser_ranging_sensor.lox.rangingTest(&laser_ranging_sensor.measure, false);
   if (laser_ranging_sensor.measure.RangeStatus != 4) { // if completely out of range / bad signal
-        Serial.print("Distance: ");
-        Serial.print(laser_ranging_sensor.measure.RangeMilliMeter);
-        Serial.println(" mm");
+        //Serial.print("Distance: ");
+        //Serial.print(laser_ranging_sensor.measure.RangeMilliMeter);
+        //Serial.println(" mm");
         // možná později přidat proměnou pro ukládání posledních hodnot
     } else {
         Serial.println("Out of range");
@@ -148,12 +148,12 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
 {
   // Read raw values from IR sensors
   //infrared_sensors.ir_raw[0] = analogRead(infrared_sensors.pins[0]);
-  infrared_sensors.ir_digital[0] = digitalRead(infrared_sensors.pins[0]);
+  infrared_sensors.ir_digital[0] = !digitalRead(infrared_sensors.pins[0]);
   infrared_sensors.ir_raw[1] = analogRead(infrared_sensors.pins[1]);
   infrared_sensors.ir_raw[2] = analogRead(infrared_sensors.pins[2]);
   infrared_sensors.ir_raw[3] = analogRead(infrared_sensors.pins[3]);
   //infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
-  infrared_sensors.ir_digital[4] = digitalRead(infrared_sensors.pins[4]);
+  infrared_sensors.ir_digital[4] = !digitalRead(infrared_sensors.pins[4]);
 
   // Convert analog to digital values based on threshold
   for (int i = 1; i < 4; i++) {
@@ -161,7 +161,7 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   }
   
   // Print analog values on one line
-  Serial.print("IR analog: ");
+  //Serial.print("IR analog: ");
   for (int i = 1; i < 4; i++) {
     Serial.print(infrared_sensors.ir_raw[i]);
     if (i < 3) Serial.print(" ");
@@ -169,11 +169,82 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   Serial.println();
 
   // Print digital values on one line (indices: 0,1,2,3,5)
-  Serial.print("IR digital: ");
+  //Serial.print("IR digital: ");
   for (int k = 0; k < 5; k++) {
     Serial.print(infrared_sensors.ir_digital[k]);
     if (k < 4) Serial.print(" ");
   }
   Serial.println();
 
+}
+
+void robot_t::InfraredSensorsReference(infrared_sensor_t &infrared_sensors)
+{
+  constexpr int calibration_samples = 1000;
+  uint32_t sum[5] = {0, 0, 0, 0, 0};
+
+  for(int i = 0; i < calibration_samples; i++){
+    for(int j = 1; j < 4; j++)
+      sum[j] += analogRead(infrared_sensors.pins[j]);
+
+    delayMicroseconds(200);
+  }
+
+  for(int k = 1; k < 4; k++)
+    infrared_sensors.ir_ref_white[k] = sum[k] / calibration_samples;
+
+  Serial.println("IR sensors calibrated. Reference values:");
+  for(int m = 1; m < 4; m++){ 
+    Serial.print("IR");
+    Serial.print(m+1);
+    Serial.print(": ");
+    Serial.println(infrared_sensors.ir_ref_white[m]);
+  }
+
+}
+
+void robot_t::InfraredSensorsPosition(infrared_sensor_t &infrared_sensors)
+{
+    float ir_signal[5] = {0};
+    float weighted_sum = 0.0f;
+    float sum = 0.0f;
+
+    for (int i = 1; i <= 3; i++) { // IR2, IR3, IR4
+        infrared_sensors.ir_raw[i] = analogRead(infrared_sensors.pins[i]);
+
+        // Normalized signal: 0 = white, 1 = black
+        float signal = float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_raw[i]) /
+                       float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_ref_black[i]);
+        if (signal < 0) signal = 0;
+        if (signal > 1) signal = 1;
+
+        ir_signal[i] = signal;
+    }
+
+    ir_signal[0] = infrared_sensors.ir_digital[0] ? 1.0f : 0.0f;
+    ir_signal[4] = infrared_sensors.ir_digital[4] ? 1.0f : 0.0f;
+
+    bool line_detected = ir_signal[2] > 0.1f; // threshold can be tuned
+    if (!line_detected) {
+        Serial.println("Line lost!");
+        return; // or handle line-lost recovery
+    }
+
+    for (int i = 1; i <= 3; i++) {
+        weighted_sum += infrared_sensors.weights[i] * ir_signal[i];
+        sum += ir_signal[i];
+    }
+
+    if (ir_signal[0] > 0.5f) { // left edge
+        weighted_sum = -2.0f;
+        sum = 1.0f;
+    } else if (ir_signal[4] > 0.5f) { // right edge
+        weighted_sum = 2.0f;
+        sum = 1.0f;
+    }
+
+    float line_position = (sum > 0.0f) ? (weighted_sum / sum) : 0.0f;
+
+    Serial.print("Line position: ");
+    Serial.println(line_position);
 }

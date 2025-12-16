@@ -63,6 +63,9 @@ typedef struct{
   uint16_t ir_raw[5]; // IR sensorů
   uint8_t ir_digital[5]; // Digitální hodnoty IR senzorů (přes prahovou hodnotu)
   const int ir_treshold = 500; // Záleží na odstínu čáry, NASTAVIT !!!
+  uint16_t ir_ref_black[5]; // Referenční hodnoty pro kalibraci
+  uint16_t ir_ref_white[5]; // Referenční hodnoty pro kalibraci
+  int weights[5] = { 0, -1, 0, 1, 0}; // Váhy pro výpočet polohy čáry
   uint8_t pins[5];
 } infrared_sensor_t;
 
@@ -100,8 +103,12 @@ class robot_t {
   void setRobotVW(float Vnom, float Wnom);
 
   void IMURead(MPU6500 mpu, imu_t &imu);
+
   void LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_sensor);
+
   void InfraredSensorsRead(infrared_sensor_t &infrared_sensors);
+  void InfraredSensorsReference(infrared_sensor_t &infrared_sensors);
+  void InfraredSensorsPosition(infrared_sensor_t &infrared_sensors);
 
   void accelerationLimit(void);
   void VWToMotorsVoltage(void);

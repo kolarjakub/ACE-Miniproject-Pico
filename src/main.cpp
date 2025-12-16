@@ -155,6 +155,8 @@ MPU6500 mpu;
 imu_t imu;
 laser_ranging_sensor_t laser_ranging_sensor;
 infrared_sensor_t infrared_sensors = {
+    .ir_ref_black = {0, 157, 154, 145, 0}, // black reference values
+    .ir_ref_white = {0, 970, 969, 968, 0}, // white reference values
     .pins = {IR1_pin, IR2_pin, IR3_pin, IR4_pin, IR5_pin}
 };
 robot_t robot;
@@ -336,12 +338,14 @@ void loop()
     switch (FSM.currentState)
     {
       case State::IDLE:
-        FSM.newState = State::CALIBRATION_IMU;
+        //FSM.newState = State::CALIBRATION_IMU;
+        //robot.InfraredSensorsReference(infrared_sensors);
+        robot.InfraredSensorsPosition(infrared_sensors);
         break;
 
       case State::CALIBRATION_IMU:
-        mpu.calibrateAccelGyro();
-        FSM.newState = State::LINE_FOLLOW;
+        //mpu.calibrateAccelGyro();
+        //FSM.newState = State::LINE_FOLLOW;
         break;
 
       case State::LINE_FOLLOW:
@@ -371,9 +375,10 @@ void loop()
 
 
     // Debug information
-    Serial.print(" currentState: ");
-    Serial.println(FSM.getStateName());
+    //Serial.print(" currentState: ");
+    //Serial.println(FSM.getStateName());
 
+    /*
     Serial.print(" M1: ");
     Serial.print(robot.PWM_1);
     Serial.print(" M2: ");
@@ -408,6 +413,7 @@ void loop()
     Serial.print(robot.v2ref);
     Serial.print(" v_req: ");
     Serial.print(robot.v_req);
+    */
     Serial.print(" mode: ");
     Serial.print(robot.control_mode);
     Serial.print(" cmd: ");
