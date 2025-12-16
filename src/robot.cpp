@@ -127,7 +127,6 @@ void robot_t::IMURead(MPU6500 mpu, imu_t &imu)
     imu.a.x = mpu.getAccX();
     imu.a.y = mpu.getAccY();
     imu.a.z = mpu.getAccZ();
-
   }
 }
 
@@ -148,14 +147,35 @@ void robot_t::LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_senso
 void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
 {
   // Read raw values from IR sensors
-  infrared_sensors.ir_raw[0] = analogRead(infrared_sensors.pins[0]);
+  //infrared_sensors.ir_raw[0] = analogRead(infrared_sensors.pins[0]);
+  infrared_sensors.ir_digital[0] = digitalRead(infrared_sensors.pins[0]);
   infrared_sensors.ir_raw[1] = analogRead(infrared_sensors.pins[1]);
   infrared_sensors.ir_raw[2] = analogRead(infrared_sensors.pins[2]);
   infrared_sensors.ir_raw[3] = analogRead(infrared_sensors.pins[3]);
-  infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
+  //infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
+  infrared_sensors.ir_digital[5] = digitalRead(infrared_sensors.pins[5]);
 
-  // Convert to digital values based on threshold
-  for (int i = 0; i < 5; i++) {
+  // Convert analog to digital values based on threshold
+  for (int i = 1; i < 4; i++) {
       infrared_sensors.ir_digital[i] = (infrared_sensors.ir_raw[i] > infrared_sensors.ir_treshold) ? 1 : 0;
   }
+  
+  // Print analog values on one line
+  Serial.print("IR analog: ");
+  for (int i = 1; i < 4; i++) {
+    Serial.print(infrared_sensors.ir_raw[i]);
+    if (i < 3) Serial.print(" ");
+  }
+  Serial.println();
+
+  // Print digital values on one line (indices: 0,1,2,3,5)
+  Serial.print("IR digital: ");
+  int _ir_idx[] = {0,1,2,3,5};
+  for (int k = 0; k < 5; k++) {
+    int i = _ir_idx[k];
+    Serial.print(infrared_sensors.ir_digital[i]);
+    if (k < 4) Serial.print(" ");
+  }
+  Serial.println();
+
 }

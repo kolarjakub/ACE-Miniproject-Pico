@@ -310,6 +310,11 @@ void loop()
 
     // Read and process sensors
     read_encoders();
+
+    robot.IMURead(mpu, imu);
+    robot.InfraredSensorsRead(infrared_sensors);
+    robot.LaserRangingSensorRead(laser_ranging_sensor);
+
     robot.enc1 = enc1;
     robot.enc2 = enc2;
     robot.odometry();
@@ -319,6 +324,7 @@ void loop()
     //   v_req and w_req          when robot.control_mode = cm_pid
     //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
     // ...
+
 
     // Calc outputs
     robot.setRobotVW(robot.v_req, robot.w_req);
