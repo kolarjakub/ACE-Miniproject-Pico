@@ -35,6 +35,8 @@ robot_t::robot_t()
   wheel_radius = 0.0689 / 2;
   dv_max = 5;
   dw_max = 10;
+  //dv_max = 0.1f;
+  //dw_max = 0.1f;
   dt = 0.04;
 }
 
@@ -176,7 +178,46 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   }
   Serial.println();
 
+
+  for (int i = 1; i <= 3; i++) { // IR2, IR3, IR4
+      // Normalized signal: 0 = white, 1 = black
+      float signal = float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_raw[i]) /
+                      float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_ref_black[i]);
+      if (signal < 0) signal = 0;
+      if (signal > 1) signal = 1;
+
+      infrared_sensors.ir_signal[i] = signal;
+  }
+
+  infrared_sensors.ir_signal[0] = infrared_sensors.ir_digital[0] ? 1.0f : 0.0f;
+  infrared_sensors.ir_signal[4] = infrared_sensors.ir_digital[4] ? 1.0f : 0.0f;
+
+  bool line_in_center = infrared_sensors.ir_signal[2] > 0.1f; // threshold can be tuned
+  if (!line_in_center) {
+      Serial.println("Line in center lost!");
+      //return; // or handle line-lost recovery
+  }
+
+  for (int i = 1; i <= 3; i++) {
+      infrared_sensors.weighted_sum += infrared_sensors.weights[i] * infrared_sensors.ir_signal[i];
+      infrared_sensors.sum += infrared_sensors.ir_signal[i];
+  }
+
+  if (infrared_sensors.ir_signal[0] > 0.5f) { // left edge
+      infrared_sensors.weighted_sum = -2.0f;
+      infrared_sensors.sum = 1.0f;
+  } else if (infrared_sensors.ir_signal[4] > 0.5f) { // right edge
+      infrared_sensors.weighted_sum = 2.0f;
+      infrared_sensors.sum = 1.0f;
+  }
+
+  infrared_sensors.line_position = (infrared_sensors.sum > 0.0f) ? (infrared_sensors.weighted_sum / infrared_sensors.sum) : 0.0f;
+
+  Serial.print("Line position: ");
+  Serial.println(infrared_sensors.line_position);
 }
+
+
 
 void robot_t::InfraredSensorsReference(infrared_sensor_t &infrared_sensors)
 {
@@ -201,50 +242,4 @@ void robot_t::InfraredSensorsReference(infrared_sensor_t &infrared_sensors)
     Serial.println(infrared_sensors.ir_ref_white[m]);
   }
 
-}
-
-void robot_t::InfraredSensorsPosition(infrared_sensor_t &infrared_sensors)
-{
-    float ir_signal[5] = {0};
-    float weighted_sum = 0.0f;
-    float sum = 0.0f;
-
-    for (int i = 1; i <= 3; i++) { // IR2, IR3, IR4
-        infrared_sensors.ir_raw[i] = analogRead(infrared_sensors.pins[i]);
-
-        // Normalized signal: 0 = white, 1 = black
-        float signal = float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_raw[i]) /
-                       float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_ref_black[i]);
-        if (signal < 0) signal = 0;
-        if (signal > 1) signal = 1;
-
-        ir_signal[i] = signal;
-    }
-
-    ir_signal[0] = infrared_sensors.ir_digital[0] ? 1.0f : 0.0f;
-    ir_signal[4] = infrared_sensors.ir_digital[4] ? 1.0f : 0.0f;
-
-    bool line_detected = ir_signal[2] > 0.1f; // threshold can be tuned
-    if (!line_detected) {
-        Serial.println("Line lost!");
-        return; // or handle line-lost recovery
-    }
-
-    for (int i = 1; i <= 3; i++) {
-        weighted_sum += infrared_sensors.weights[i] * ir_signal[i];
-        sum += ir_signal[i];
-    }
-
-    if (ir_signal[0] > 0.5f) { // left edge
-        weighted_sum = -2.0f;
-        sum = 1.0f;
-    } else if (ir_signal[4] > 0.5f) { // right edge
-        weighted_sum = 2.0f;
-        sum = 1.0f;
-    }
-
-    float line_position = (sum > 0.0f) ? (weighted_sum / sum) : 0.0f;
-
-    Serial.print("Line position: ");
-    Serial.println(line_position);
 }

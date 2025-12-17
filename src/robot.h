@@ -67,6 +67,10 @@ typedef struct{
   uint16_t ir_ref_white[5]; // Referenční hodnoty pro kalibraci
   int weights[5] = { 0, -1, 0, 1, 0}; // Váhy pro výpočet polohy čáry
   uint8_t pins[5];
+  float ir_signal[5];
+  float weighted_sum;
+  float sum;
+  float line_position;
 } infrared_sensor_t;
 
 class robot_t {
@@ -108,7 +112,6 @@ class robot_t {
 
   void InfraredSensorsRead(infrared_sensor_t &infrared_sensors);
   void InfraredSensorsReference(infrared_sensor_t &infrared_sensors);
-  void InfraredSensorsPosition(infrared_sensor_t &infrared_sensors);
 
   void accelerationLimit(void);
   void VWToMotorsVoltage(void);

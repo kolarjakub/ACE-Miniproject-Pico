@@ -33,6 +33,9 @@ RPI_PICO_Timer ITimer1(1);
 
 #define TEST_PIN 2
 
+#define VELOCITY_BASE 0.05  // m/s
+
+
 volatile int encoder1_pos = 0;
 volatile int encoder2_pos = 0;
 
@@ -293,13 +296,26 @@ void setup()
   robot.dt = 1e-3 * interval; // In seconds
   robot.PID1.dt = robot.dt;
   robot.PID2.dt = robot.dt;
+  // Set default control mode to PID so VW commands produce motor outputs
+  robot.control_mode = cm_pid;
+  // Clear PID integrators
+  robot.PID1.Se = 0;
+  robot.PID2.Se = 0;
+  robot.PID1.e = 0;
+  robot.PID2.e = 0;
+
+  robot.battery_voltage = 7.4; // it really shoud be measured...
+
+  robot.v_req=VELOCITY_BASE;
+  //robot.w_req=infrared_sensors.line_position*-0.0001f;
+  robot.w_req=0.0;
+
 }
 
 void loop() 
 {
   uint8_t b;
   if (Serial.available()) {  // Only do this if there is serial data to be read
-   
     b = Serial.read();    
     serial_commands.process_char(b);
   }  
@@ -317,15 +333,27 @@ void loop()
 
     // Read and process sensors
     read_encoders();
+    robot.enc1 = enc1;
+    robot.enc2 = enc2;
+    robot.odometry();
+
+    // Calc outputs
+    robot.setRobotVW(robot.v_req, robot.w_req);
+    robot.accelerationLimit();
+
+    robot.v = robot.v_req;
+    robot.w = robot.w_req;
+    robot.VWToMotorsVoltage();
+
+    setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
+    setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
+
 
     robot.IMURead(mpu, imu);
     robot.InfraredSensorsRead(infrared_sensors);
     robot.LaserRangingSensorRead(laser_ranging_sensor);
 
-    robot.enc1 = enc1;
-    robot.enc2 = enc2;
-    robot.odometry();
-    robot.battery_voltage = 7.4; // it really shoud be measured...
+
 
     // Control the robot here by choosing:
     //   v_req and w_req          when robot.control_mode = cm_pid
@@ -338,14 +366,13 @@ void loop()
     switch (FSM.currentState)
     {
       case State::IDLE:
-        //FSM.newState = State::CALIBRATION_IMU;
+        FSM.newState = State::CALIBRATION_IMU;
         //robot.InfraredSensorsReference(infrared_sensors);
-        robot.InfraredSensorsPosition(infrared_sensors);
         break;
 
       case State::CALIBRATION_IMU:
         //mpu.calibrateAccelGyro();
-        //FSM.newState = State::LINE_FOLLOW;
+        FSM.newState = State::LINE_FOLLOW;
         break;
 
       case State::LINE_FOLLOW:
@@ -362,23 +389,13 @@ void loop()
     FSM.setState(FSM.newState);
 
 
-    // Calc outputs
-    robot.setRobotVW(robot.v_req, robot.w_req);
-    //robot.accelerationLimit();
-
-    robot.v = robot.v_req;
-    robot.w = robot.w_req;
-    robot.VWToMotorsVoltage();
-
-    setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
-    setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
 
 
     // Debug information
-    //Serial.print(" currentState: ");
-    //Serial.println(FSM.getStateName());
+    Serial.print(" currentState: ");
+    Serial.println(FSM.getStateName());
 
-    /*
+    
     Serial.print(" M1: ");
     Serial.print(robot.PWM_1);
     Serial.print(" M2: ");
@@ -413,7 +430,7 @@ void loop()
     Serial.print(robot.v2ref);
     Serial.print(" v_req: ");
     Serial.print(robot.v_req);
-    */
+    
     Serial.print(" mode: ");
     Serial.print(robot.control_mode);
     Serial.print(" cmd: ");

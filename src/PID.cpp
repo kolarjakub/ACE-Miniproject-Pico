@@ -34,7 +34,9 @@ PID_t::PID_t()
   // Some typical values
   dt = 0.04;
   Kp = 8.7;
+  //Kp = 7.0;
   Ki = 60;
+  //Ki = 4.0;
   Kd = 0;
   Kf = 12.5;
   
