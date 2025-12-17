@@ -33,7 +33,7 @@ RPI_PICO_Timer ITimer1(1);
 
 #define TEST_PIN 2
 
-#define VELOCITY_BASE 0.05  // m/s
+#define VELOCITY_BASE -0.05  // m/s
 
 
 volatile int encoder1_pos = 0;
@@ -306,10 +306,8 @@ void setup()
 
   robot.battery_voltage = 7.4; // it really shoud be measured...
 
-  robot.v_req=VELOCITY_BASE;
-  //robot.w_req=infrared_sensors.line_position*-0.0001f;
+  robot.v_req=0.0;
   robot.w_req=0.0;
-
 }
 
 void loop() 
@@ -348,7 +346,6 @@ void loop()
     setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
     setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
 
-
     robot.IMURead(mpu, imu);
     robot.InfraredSensorsRead(infrared_sensors);
     robot.LaserRangingSensorRead(laser_ranging_sensor);
@@ -371,11 +368,13 @@ void loop()
         break;
 
       case State::CALIBRATION_IMU:
-        //mpu.calibrateAccelGyro();
+        mpu.calibrateAccelGyro();
         FSM.newState = State::LINE_FOLLOW;
         break;
 
       case State::LINE_FOLLOW:
+        robot.v_req=VELOCITY_BASE;
+        robot.w_req=0.0;
         break;
 
       case State::ROTATE:
