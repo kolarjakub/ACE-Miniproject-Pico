@@ -71,6 +71,7 @@ typedef struct{
   float weighted_sum;
   float sum;
   float line_position;
+  bool line_detected;
 } infrared_sensor_t;
 
 class robot_t {

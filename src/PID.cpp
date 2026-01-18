@@ -33,15 +33,16 @@ PID_t::PID_t()
 {
   // Some typical values
   dt = 0.04;
-  Kp = 8.7;
+  Kp = 40.0;
+  //Kp = 8.7;
   //Kp = 7.0;
-  Ki = 60;
+  Ki = 5.0;
   //Ki = 4.0;
   Kd = 0;
-  Kf = 12.5;
+  Kf = 30.0;
   
-  m_max = 5.8;
-  m_min = -5.8;
+  m_max = 5.0;
+  m_min = -m_max;
 }
 
 
@@ -76,4 +77,13 @@ float PID_t::calc(float new_w_ref, float new_w)
   }
 
   return m;
+}
+
+
+
+void PID_t::reset()
+{
+  e = 0;
+  last_e = 0;
+  Se = 0;
 }

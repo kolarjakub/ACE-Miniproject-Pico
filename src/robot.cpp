@@ -135,14 +135,15 @@ void robot_t::IMURead(MPU6500 mpu, imu_t &imu)
 void robot_t::LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_sensor)
 {
   laser_ranging_sensor.lox.rangingTest(&laser_ranging_sensor.measure, false);
+  /*
   if (laser_ranging_sensor.measure.RangeStatus != 4) { // if completely out of range / bad signal
         //Serial.print("Distance: ");
         //Serial.print(laser_ranging_sensor.measure.RangeMilliMeter);
         //Serial.println(" mm");
         // možná později přidat proměnou pro ukládání posledních hodnot
     } else {
-        Serial.println("Out of range");
-    }
+        //Serial.println("Out of range");
+    }*/
 
 }
 
@@ -164,6 +165,7 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   
   // Print analog values on one line
   //Serial.print("IR analog: ");
+  /*
   for (int i = 1; i < 4; i++) {
     Serial.print(infrared_sensors.ir_raw[i]);
     if (i < 3) Serial.print(" ");
@@ -176,7 +178,7 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
     Serial.print(infrared_sensors.ir_digital[k]);
     if (k < 4) Serial.print(" ");
   }
-  Serial.println();
+  Serial.println();*/
 
 
   for (int i = 1; i <= 3; i++) { // IR2, IR3, IR4
@@ -194,7 +196,7 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
 
   bool line_in_center = infrared_sensors.ir_signal[2] > 0.1f; // threshold can be tuned
   if (!line_in_center) {
-      Serial.println("Line in center lost!");
+      //Serial.println("Line in center lost!");
       //return; // or handle line-lost recovery
   }
 
@@ -203,7 +205,11 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
       infrared_sensors.sum += infrared_sensors.ir_signal[i];
   }
 
-  if (infrared_sensors.ir_signal[0] > 0.5f) { // left edge
+  if (infrared_sensors.ir_signal[0] > 0.5f && infrared_sensors.ir_signal[4] > 0.5f) { // left edge
+      infrared_sensors.weighted_sum = 0.0f;
+      infrared_sensors.sum = 0.0f;
+      infrared_sensors.line_detected = false;
+  }else if (infrared_sensors.ir_signal[0] > 0.5f) { // left edge
       infrared_sensors.weighted_sum = -2.0f;
       infrared_sensors.sum = 1.0f;
   } else if (infrared_sensors.ir_signal[4] > 0.5f) { // right edge
@@ -212,9 +218,10 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
   }
 
   infrared_sensors.line_position = (infrared_sensors.sum > 0.0f) ? (infrared_sensors.weighted_sum / infrared_sensors.sum) : 0.0f;
-
+  /*
   Serial.print("Line position: ");
   Serial.println(infrared_sensors.line_position);
+  */
 }
 
 

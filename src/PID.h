@@ -45,6 +45,7 @@ class PID_t
     PID_t();
     
     float calc(float new_w_ref, float new_w);
+    void reset();
 };
 
 #endif // PID_H

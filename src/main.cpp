@@ -11,11 +11,28 @@
 // Init RPI_PICO_Timer
 RPI_PICO_Timer ITimer1(1);
 
+
+
 #define ENC1_A 11
 #define ENC1_B 10
 
 #define ENC2_A 9
 #define ENC2_B 8
+
+/*
+#define MOTOR1A_PIN 7
+#define MOTOR1B_PIN 6
+
+#define MOTOR2A_PIN 5
+#define MOTOR2B_PIN 4
+*/
+#define MOTOR1A_PIN 5
+#define MOTOR1B_PIN 4
+
+#define MOTOR2A_PIN 6
+#define MOTOR2B_PIN 7
+
+
 
 #define IR1_pin 22
 #define IR2_pin A0  //GPIO26
@@ -33,7 +50,7 @@ RPI_PICO_Timer ITimer1(1);
 
 #define TEST_PIN 2
 
-#define VELOCITY_BASE -0.05  // m/s
+#define VELOCITY_BASE -0.05f
 
 
 volatile int encoder1_pos = 0;
@@ -80,32 +97,6 @@ bool timer_handler(struct repeating_timer *t)
   return true;
 }
 
-/*
-// Less optimized version
-bool timer_handler(struct repeating_timer *t)
-{
-  int next_state, table_input;
-  digitalWriteFast(TEST_PIN, 1);
-
-  next_state = digitalReadFast(ENC1_A) << 1;
-  next_state |= digitalReadFast(ENC1_B);
-
-  table_input = (encoder1_state << 2) | next_state;
-  encoder1_pos += encoder_table[table_input];
-  encoder1_state = next_state;
-
-  next_state = digitalReadFast(ENC2_A) << 1;
-  next_state |= digitalReadFast(ENC2_B);
-
-  table_input = (encoder2_state << 2) | next_state;
-  encoder2_pos -= encoder_table[table_input];
-  encoder2_state = next_state;
-
-  count++;
-  digitalWriteFast(TEST_PIN, 0);
-  return true;
-}
-*/
 
 void read_encoders(void)
 {
@@ -124,12 +115,24 @@ void read_encoders(void)
 
 // PWM stuff
 
-#define MOTOR1A_PIN 7
-#define MOTOR1B_PIN 6
 
-#define MOTOR2A_PIN 5
-#define MOTOR2B_PIN 4
+#include "robot.h"
+#include "fsm.h"
 
+
+
+MPU6500 mpu;
+imu_t imu;
+laser_ranging_sensor_t laser_ranging_sensor;
+infrared_sensor_t infrared_sensors = {
+    .ir_ref_black = {0, 157, 154, 145, 0}, // black reference values
+    .ir_ref_white = {0, 970, 969, 968, 0}, // white reference values
+    .pins = {IR1_pin, IR2_pin, IR3_pin, IR4_pin, IR5_pin}
+};
+robot_t robot;
+fsm FSM;
+PID_t lineFollowerPID;
+float angular_correction;
 
 
 void setMotorPWM(int new_PWM, int pin_a, int pin_b)
@@ -151,20 +154,6 @@ void setMotorPWM(int new_PWM, int pin_a, int pin_b)
 }
 
 
-#include "robot.h"
-#include "fsm.h"
-
-MPU6500 mpu;
-imu_t imu;
-laser_ranging_sensor_t laser_ranging_sensor;
-infrared_sensor_t infrared_sensors = {
-    .ir_ref_black = {0, 157, 154, 145, 0}, // black reference values
-    .ir_ref_white = {0, 970, 969, 968, 0}, // white reference values
-    .pins = {IR1_pin, IR2_pin, IR3_pin, IR4_pin, IR5_pin}
-};
-robot_t robot;
-fsm FSM;
-
 // Remote commands
 
 unsigned long interval, last_cycle;
@@ -173,6 +162,7 @@ unsigned long loop_micros;
 #include "commands.h"
 
 commands_t serial_commands;
+unsigned int cycle_count = 0;
 
 void process_command(frame_data_t frame)
 {
@@ -293,21 +283,48 @@ void setup()
     Serial.println("Can't set ITimer. Select another freq. or timer");
 
   interval = 40;             // In miliseconds
+
   robot.dt = 1e-3 * interval; // In seconds
   robot.PID1.dt = robot.dt;
   robot.PID2.dt = robot.dt;
+  robot.dv_max = 0.3f; // m/s every cycle
+  robot.dw_max = 0.3f; // m/s every cycle
+
+  /*
+  // Configure line-following PID (PD mode)
+  robot.PID1.Kp = 40.0f;  // proportional gain
+  robot.PID1.Ki = 2.5f; 
+  robot.PID1.Kd = 0.0f;  // derivative gain
+  robot.PID1.Kf = 10.0f;  // no feedforward
+  robot.PID1.dt = robot.dt;
+  
+  // Configure line-following PID (PD mode)
+  robot.PID2.Kp = 40.0f;  // proportional gain
+  robot.PID2.Ki = 2.5f;
+  robot.PID2.Kd = 0.0f;  // derivative gain
+  robot.PID2.Kf = 10.0f;  // no feedforward
+  robot.PID2.dt = robot.dt;
+*/
+
+  // Configure line-following PID (PD mode)
+  lineFollowerPID.Kp = 0.02f;  // proportional gain
+  lineFollowerPID.Ki = 0.0f;  // disable integral
+  lineFollowerPID.Kd = 0.07f;  // derivative gain
+  lineFollowerPID.Kf = 0.0f;  // no feedforward
+  lineFollowerPID.dt = robot.dt;
+  
   // Set default control mode to PID so VW commands produce motor outputs
   robot.control_mode = cm_pid;
+
   // Clear PID integrators
-  robot.PID1.Se = 0;
-  robot.PID2.Se = 0;
-  robot.PID1.e = 0;
-  robot.PID2.e = 0;
+  robot.PID1.reset();
+  robot.PID2.reset();
+  lineFollowerPID.reset();
+
 
   robot.battery_voltage = 7.4; // it really shoud be measured...
 
-  robot.v_req=0.0;
-  robot.w_req=0.0;
+  robot.setRobotVW(0.0, 0.0);
 }
 
 void loop() 
@@ -350,8 +367,6 @@ void loop()
     robot.InfraredSensorsRead(infrared_sensors);
     robot.LaserRangingSensorRead(laser_ranging_sensor);
 
-
-
     // Control the robot here by choosing:
     //   v_req and w_req          when robot.control_mode = cm_pid
     //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
@@ -369,12 +384,16 @@ void loop()
 
       case State::CALIBRATION_IMU:
         mpu.calibrateAccelGyro();
+        robot.PID1.reset();
+        robot.PID2.reset();
+        lineFollowerPID.reset();
         FSM.newState = State::LINE_FOLLOW;
         break;
 
       case State::LINE_FOLLOW:
-        robot.v_req=VELOCITY_BASE;
-        robot.w_req=0.0;
+        angular_correction = lineFollowerPID.calc(0.0f, infrared_sensors.line_position);
+        //robot.setRobotVW(VELOCITY_BASE, -angular_correction);
+        robot.setRobotVW(VELOCITY_BASE, 0.0f);
         break;
 
       case State::ROTATE:
@@ -388,55 +407,64 @@ void loop()
     FSM.setState(FSM.newState);
 
 
-
-
-    // Debug information
-    Serial.print(" currentState: ");
-    Serial.println(FSM.getStateName());
-
+    // Debug information every 25 cycles
+    cycle_count++;
+    if(cycle_count >= 25) {
+      cycle_count = 0;
     
-    Serial.print(" M1: ");
-    Serial.print(robot.PWM_1);
-    Serial.print(" M2: ");
-    Serial.print(robot.PWM_2);
+      // Debug information
+      Serial.print(" currentState: ");
+      Serial.println(FSM.getStateName());
 
-    Serial.print(" IMU_gyroscope X: ");
-    Serial.print(imu.w.x);
-    Serial.print(" Y: ");
-    Serial.print(imu.w.y);
-    Serial.print(" Z: ");
-    Serial.print(imu.w.z);
-    Serial.print(" IMU_accelerrometer X: ");
-    Serial.print(imu.a.x);
-    Serial.print(" Y: ");
-    Serial.print(imu.a.y);
-    Serial.print(" Z: ");
-    Serial.print(imu.a.z);
-          
-    // Serial.print(" cnt: ");
-    // Serial.print(act_count);
-    // Serial.print(" e1: ");
-    // Serial.print(enc1);
-    // Serial.print(" e2: ");
-    // Serial.print(enc2);
-    Serial.print(" v1e: ");
-    Serial.print(robot.v1e);
-    Serial.print(" v2e: ");
-    Serial.print(robot.v2e);
-    Serial.print(" v1ref: ");
-    Serial.print(robot.v1ref);
-    Serial.print(" v2ref: ");
-    Serial.print(robot.v2ref);
-    Serial.print(" v_req: ");
-    Serial.print(robot.v_req);
-    
-    Serial.print(" mode: ");
-    Serial.print(robot.control_mode);
-    Serial.print(" cmd: ");
-    Serial.print(serial_commands.frame.command);
-    Serial.print(" loop: ");
-    Serial.println(micros() - loop_micros);
+      Serial.print(" line.posion: ");
+      Serial.println(infrared_sensors.line_position);
+      Serial.print(" angular correction: ");
+      Serial.println(angular_correction);
 
+      Serial.print(" M1: ");
+      Serial.print(robot.PWM_1);
+      Serial.print(" M2: ");
+      Serial.print(robot.PWM_2);
+
+      Serial.print(" IMU_gyroscope X: ");
+      Serial.print(imu.w.x);
+      Serial.print(" Y: ");
+      Serial.print(imu.w.y);
+      Serial.print(" Z: ");
+      Serial.print(imu.w.z);
+      Serial.print(" IMU_accelerrometer X: ");
+      Serial.print(imu.a.x);
+      Serial.print(" Y: ");
+      Serial.print(imu.a.y);
+      Serial.print(" Z: ");
+      Serial.println(imu.a.z);
+            
+      // Serial.print(" cnt: ");
+      // Serial.print(act_count);
+      // Serial.print(" e1: ");
+      // Serial.print(enc1);
+      // Serial.print(" e2: ");
+      // Serial.print(enc2);
+      Serial.print(" v1e: ");
+      Serial.print(robot.v1e);
+      Serial.print(" v2e: ");
+      Serial.print(robot.v2e);
+      Serial.print(" v1ref: ");
+      Serial.print(robot.v1ref);
+      Serial.print(" v2ref: ");
+      Serial.print(robot.v2ref);
+      Serial.print(" v_req: ");
+      Serial.print(robot.v_req);
+      Serial.print(" ve: ");
+      Serial.print(robot.ve);
+
+      Serial.print(" mode: ");
+      Serial.print(robot.control_mode);
+      Serial.print(" cmd: ");
+      Serial.print(serial_commands.frame.command);
+      Serial.print(" loop: ");
+      Serial.println(micros() - loop_micros);
+    }
   }
     
 }
