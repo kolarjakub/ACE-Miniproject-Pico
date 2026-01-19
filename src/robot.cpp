@@ -155,123 +155,100 @@ void robot_t::LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_senso
 
 }
 
+
+
 void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
 {
-  // Read raw values from IR sensors
-  //infrared_sensors.ir_raw[0] = analogRead(infrared_sensors.pins[0]);
-  infrared_sensors.ir_digital[0] = !digitalRead(infrared_sensors.pins[0]);
-  infrared_sensors.ir_raw[1] = analogRead(infrared_sensors.pins[1]);
-  infrared_sensors.ir_raw[2] = analogRead(infrared_sensors.pins[2]);
-  infrared_sensors.ir_raw[3] = analogRead(infrared_sensors.pins[3]);
-  //infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
-  infrared_sensors.ir_digital[4] = !digitalRead(infrared_sensors.pins[4]);
+    // Read raw values from IR sensors
+    //infrared_sensors.ir_raw[0] = analogRead(infrared_sensors.pins[0]);
+    infrared_sensors.ir_digital[0] = !digitalRead(infrared_sensors.pins[0]);
+    infrared_sensors.ir_raw[1] = analogRead(infrared_sensors.pins[1]);
+    infrared_sensors.ir_raw[2] = analogRead(infrared_sensors.pins[2]);
+    infrared_sensors.ir_raw[3] = analogRead(infrared_sensors.pins[3]);
+    //infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
+    infrared_sensors.ir_digital[4] = !digitalRead(infrared_sensors.pins[4]);
 
-  // Convert analog to digital values based on threshold
-  for (int i = 1; i < 4; i++) {
-      infrared_sensors.ir_digital[i] = (infrared_sensors.ir_raw[i] < infrared_sensors.ir_treshold) ? 1 : 0;
-  }
-  
-  // Print analog values on one line
-  //Serial.print("IR analog: ");
-  /*
-  for (int i = 1; i < 4; i++) {
-    Serial.print(infrared_sensors.ir_raw[i]);
-    if (i < 3) Serial.print(" ");
-  }
-  Serial.println();
+    // Convert analog to digital values based on threshold
+    for (int i = 1; i < 4; i++) {
+        infrared_sensors.ir_digital[i] = (infrared_sensors.ir_raw[i] < infrared_sensors.ir_treshold) ? 1 : 0;
+    }
 
-  // Print digital values on one line (indices: 0,1,2,3,5)
-  //Serial.print("IR digital: ");
-  for (int k = 0; k < 5; k++) {
-    Serial.print(infrared_sensors.ir_digital[k]);
-    if (k < 4) Serial.print(" ");
-  }
-  Serial.println();*/
+    // Normalize signals for IR2, IR3, IR4
+    for (int i = 1; i <= 3; i++) {
+        float signal = float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_raw[i]) /
+                       float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_ref_black[i]);
+        if (signal < 0) signal = 0;
+        if (signal > 1) signal = 1;
+        infrared_sensors.ir_signal[i] = signal;
+    }
 
+    infrared_sensors.ir_signal[0] = infrared_sensors.ir_digital[0];
+    infrared_sensors.ir_signal[4] = infrared_sensors.ir_digital[4];
 
-  for (int i = 1; i <= 3; i++) { // IR2, IR3, IR4
-      // Normalized signal: 0 = white, 1 = black
-      float signal = float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_raw[i]) /
-                      float(infrared_sensors.ir_ref_white[i] - infrared_sensors.ir_ref_black[i]);
-      if (signal < 0) signal = 0;
-      if (signal > 1) signal = 1;
+    infrared_sensors.line_detected = infrared_sensors.ir_digital[2];
 
-      infrared_sensors.ir_signal[i] = signal;
-  }
+    // Compute line position as weighted average
+    float weighted_sum = 0.0f;
+    float sum = 0.0f;
+    for (int i = 1; i <= 3; i++) {
+        weighted_sum += infrared_sensors.weights[i] * infrared_sensors.ir_signal[i];
+        sum += infrared_sensors.ir_signal[i];
+    }
 
-  infrared_sensors.ir_signal[0] = infrared_sensors.ir_digital[0];
-  infrared_sensors.ir_signal[4] = infrared_sensors.ir_digital[4];
+    if (infrared_sensors.ir_digital[0] && infrared_sensors.ir_digital[4]) { // out of line
+        weighted_sum = 0.0f;
+        sum = 0.0f;
+    } else if (infrared_sensors.ir_digital[0] && !infrared_sensors.ir_digital[2]) { // left edge
+        weighted_sum = -infrared_sensors.line_pos_saturation;
+        sum = 1.0f;
+    } else if (infrared_sensors.ir_digital[4] && !infrared_sensors.ir_digital[2]) { // right edge
+        weighted_sum = infrared_sensors.line_pos_saturation;
+        sum = 1.0f;
+    }
 
-  bool line_in_center = infrared_sensors.ir_signal[2] > 0.1f; // threshold can be tuned
-  if (!line_in_center) {
-      //Serial.println("Line in center lost!");
-      //return; // or handle line-lost recovery
-  }
+    infrared_sensors.line_position = (sum > 0.0f) ? (weighted_sum / sum) : 0.0f;
 
-  float weighted_sum=0.0f;
-  float sum=0.0f;
+    // ================= Intersection detection =================
+    bool left_pattern  = infrared_sensors.ir_digital[0] &&
+                         infrared_sensors.ir_digital[1] &&
+                         infrared_sensors.ir_digital[2];
 
-  for (int i = 1; i <= 3; i++) {
-      weighted_sum += infrared_sensors.weights[i] * infrared_sensors.ir_signal[i];
-      sum += infrared_sensors.ir_signal[i];
-  }
+    bool right_pattern = infrared_sensors.ir_digital[2] &&
+                         infrared_sensors.ir_digital[3] &&
+                         infrared_sensors.ir_digital[4];
 
-  
-  if (infrared_sensors.ir_digital[0] && infrared_sensors.ir_digital[4]){ // out of
-      weighted_sum = 0.0f;
-      sum = 0.0f;
-  } else if (infrared_sensors.ir_digital[0]) { // left edge
-      weighted_sum = -infrared_sensors.line_pos_saturation;
-      sum = 1.0f;
-  } else if (infrared_sensors.ir_digital[4]) { // right edge
-      weighted_sum = infrared_sensors.line_pos_saturation;
-      sum = 1.0f;
-  }
+    // Latch flags for left and right
+    if (left_pattern)  infrared_sensors.intersection_left_seen  = true;
+    if (right_pattern) infrared_sensors.intersection_right_seen = true;
 
-  infrared_sensors.line_position = (sum > 0.0f) ? (weighted_sum / sum) : 0.0f;
+    // If an intersection is detected, reset line position immediately
+    if (infrared_sensors.intersection_left_seen || infrared_sensors.intersection_right_seen) {
+        infrared_sensors.line_position = 0.0f;
+    }
 
-  
-  // Detect potential turn
-  // Edge detection for intersection
-  bool left_pattern  = infrared_sensors.ir_digital[0] &&
-                      infrared_sensors.ir_digital[1] &&
-                      infrared_sensors.ir_digital[2];
-
-  bool right_pattern = infrared_sensors.ir_digital[2] &&
-                      infrared_sensors.ir_digital[3] &&
-                      infrared_sensors.ir_digital[4];
-
-  // Latch flags for left and right
-  if (left_pattern)  infrared_sensors.intersection_left_seen  = true;
-  if (right_pattern) infrared_sensors.intersection_right_seen = true;
-
-  // Reset turn flags
-  infrared_sensors.turn_left  = 0;
-  infrared_sensors.turn_right = 0;
-
-  // Trigger left turn when we were on left intersection and now left it
-  if (infrared_sensors.intersection_left_seen && !left_pattern) {
-      infrared_sensors.turn_left = 1;
-      infrared_sensors.intersection_left_seen = false;  // reset latch
-  }
-
-  // Trigger right turn when we were on right intersection and now left it
-  if (infrared_sensors.intersection_right_seen && !right_pattern) {
-      infrared_sensors.turn_right = 1;
-      infrared_sensors.intersection_right_seen = false; // reset latch
-  }
-
-  if(infrared_sensors.turn_left && infrared_sensors.turn_right){
-    infrared_sensors.turn_left = 0;
+    // Reset turn flags
+    infrared_sensors.turn_left  = 0;
     infrared_sensors.turn_right = 0;
-    infrared_sensors.all_sensors_on_line = 1;
-  }
 
-  /*
-  Serial.print("Line position: ");
-  Serial.println(infrared_sensors.line_position);
-  */
+    // Trigger turn only when leaving the intersection
+    if (infrared_sensors.intersection_left_seen && !left_pattern) {
+        infrared_sensors.turn_left = 1;
+        infrared_sensors.intersection_left_seen = false; // reset latch
+    }
+
+    if (infrared_sensors.intersection_right_seen && !right_pattern) {
+        infrared_sensors.turn_right = 1;
+        infrared_sensors.intersection_right_seen = false; // reset latch
+    }
+
+    // Handle the rare case when both flags trigger at the same time
+    if (infrared_sensors.turn_left && infrared_sensors.turn_right){
+        infrared_sensors.turn_left = 0;
+        infrared_sensors.turn_right = 0;
+        infrared_sensors.all_sensors_on_line = 1;
+    }
 }
+
 
 
 

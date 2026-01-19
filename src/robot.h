@@ -72,7 +72,7 @@ typedef struct{
   float ir_signal[5];
   float line_position;
   bool line_detected;
-  const float line_pos_saturation = 2.0f;
+  const float line_pos_saturation = 3.0f;
   bool turn_left=0, turn_right=0, all_sensors_on_line=0;
   bool intersection_left_seen=0, intersection_right_seen=0;
 } infrared_sensor_t;
