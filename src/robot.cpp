@@ -168,10 +168,6 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
     //infrared_sensors.ir_raw[4] = analogRead(infrared_sensors.pins[4]);
     infrared_sensors.ir_digital[4] = !digitalRead(infrared_sensors.pins[4]);
 
-    // Convert analog to digital values based on threshold
-    for (int i = 1; i < 4; i++) {
-        infrared_sensors.ir_digital[i] = (infrared_sensors.ir_raw[i] < infrared_sensors.ir_treshold) ? 1 : 0;
-    }
 
     // Normalize signals for IR2, IR3, IR4
     for (int i = 1; i <= 3; i++) {
@@ -180,8 +176,9 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
         if (signal < 0) signal = 0;
         if (signal > 1) signal = 1;
         infrared_sensors.ir_signal[i] = signal;
+        infrared_sensors.ir_digital[i] = (signal < infrared_sensors.ir_treshold) ? 0 : 1;
     }
-
+    
     infrared_sensors.ir_signal[0] = infrared_sensors.ir_digital[0];
     infrared_sensors.ir_signal[4] = infrared_sensors.ir_digital[4];
 
@@ -194,14 +191,10 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
         weighted_sum += infrared_sensors.weights[i] * infrared_sensors.ir_signal[i];
         sum += infrared_sensors.ir_signal[i];
     }
-
-    if (infrared_sensors.ir_digital[0] && infrared_sensors.ir_digital[4]) { // out of line
-        weighted_sum = 0.0f;
-        sum = 0.0f;
-    } else if (infrared_sensors.ir_digital[0] && !infrared_sensors.ir_digital[2]) { // left edge
+    if (infrared_sensors.ir_digital[0] && !infrared_sensors.ir_digital[2] && !infrared_sensors.ir_digital[4]) { // left edge
         weighted_sum = -infrared_sensors.line_pos_saturation;
         sum = 1.0f;
-    } else if (infrared_sensors.ir_digital[4] && !infrared_sensors.ir_digital[2]) { // right edge
+    } else if (infrared_sensors.ir_digital[4] && !infrared_sensors.ir_digital[2] && !infrared_sensors.ir_digital[0]) { // right edge
         weighted_sum = infrared_sensors.line_pos_saturation;
         sum = 1.0f;
     }
@@ -227,8 +220,8 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
     }
 
     // Reset turn flags
-    infrared_sensors.turn_left  = 0;
-    infrared_sensors.turn_right = 0;
+    //infrared_sensors.turn_left  = 0;
+    //infrared_sensors.turn_right = 0;
 
     // Trigger turn only when leaving the intersection
     if (infrared_sensors.intersection_left_seen && !left_pattern) {
@@ -243,7 +236,7 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
 
     // Handle the rare case when both flags trigger at the same time
     if (infrared_sensors.turn_left && infrared_sensors.turn_right){
-        infrared_sensors.turn_left = 0;
+        infrared_sensors.turn_left = 1;
         infrared_sensors.turn_right = 0;
         infrared_sensors.all_sensors_on_line = 1;
     }

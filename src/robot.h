@@ -63,8 +63,8 @@ typedef struct{
 
 typedef struct{
   uint16_t ir_raw[5]; // IR sensorů
-  uint8_t ir_digital[5]; // Digitální hodnoty IR senzorů (přes prahovou hodnotu)
-  const int ir_treshold = 500; // Záleží na odstínu čáry, NASTAVIT !!!
+  bool ir_digital[5]; // Digitální hodnoty IR senzorů (přes prahovou hodnotu)
+  const float ir_treshold = 0.5f; // Záleží na odstínu čáry, NASTAVIT !!!
   uint16_t ir_ref_black[5]; // Referenční hodnoty pro kalibraci
   uint16_t ir_ref_white[5]; // Referenční hodnoty pro kalibraci
   int weights[5] = { 0, -1, 0, 1, 0}; // Váhy pro výpočet polohy čáry
@@ -72,7 +72,7 @@ typedef struct{
   float ir_signal[5];
   float line_position;
   bool line_detected;
-  const float line_pos_saturation = 3.0f;
+  const float line_pos_saturation = 5.5f;
   bool turn_left=0, turn_right=0, all_sensors_on_line=0;
   bool intersection_left_seen=0, intersection_right_seen=0;
 } infrared_sensor_t;

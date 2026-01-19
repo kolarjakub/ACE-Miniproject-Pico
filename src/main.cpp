@@ -288,14 +288,14 @@ void setup()
   robot.dt = 1e-3 * interval; // In seconds
   robot.PID1.dt = robot.dt;
   robot.PID2.dt = robot.dt;
-  robot.dv_max = 0.8f; // m/s every cycle
-  robot.dw_max = 0.8f; // m/s every cycle
+  robot.dv_max = 5.0f; // m/s every cycle
+  robot.dw_max = 5.0f; // rad/s every cycle
 
 
   // Configure line-following PID (PD mode)
-  lineFollowerPID.Kp = 0.18f;  // proportional gain
+  lineFollowerPID.Kp = 1.1f;  // proportional gain
   lineFollowerPID.Ki = 0.0f;  // disable integral
-  lineFollowerPID.Kd = 0.04f;  // derivative gain
+  lineFollowerPID.Kd = 0.10f;  // derivative gain
   lineFollowerPID.Kf = 0.0f;  // no feedforward
   lineFollowerPID.dt = robot.dt;
   
@@ -365,7 +365,7 @@ void loop()
                 {
                     robot.turn_direction = infrared_sensors.turn_left ? 1 : -1;
                     robot.rel_s = 0.0f;
-                    robot.turn_distance_remaining = -0.08f; // 8 cm forward before rotation
+                    robot.turn_distance_remaining = -0.07f; // 7 cm forward before rotation
 
                     // Clear detection flags
                     infrared_sensors.turn_left = 0;
@@ -388,7 +388,7 @@ void loop()
                 // Move forward until relative distance reaches target
                 if(robot.rel_s > robot.turn_distance_remaining)
                 {
-                    robot.setRobotVW(VELOCITY_BASE, 0.0f);
+                    robot.setRobotVW(-0.05f, 0.0f);
                     robot.accelerationLimit();
                 }
                 else
@@ -402,10 +402,10 @@ void loop()
             case State::ROTATE:
             {
                 // Rotate with constant speed until line_detected is true
-                float rotation_speed = 0.4f; // rad/s
+                float rotation_speed = 0.8f; // rad/s
                 float w_rotate = robot.turn_direction * rotation_speed;
 
-                if (infrared_sensors.line_detected && (fabsf(infrared_sensors.line_position) < 0.60f)) {
+                if (infrared_sensors.line_detected && (fabsf(infrared_sensors.line_position) < 0.30f)) {
                     w_rotate = 0.0f;
                     robot.PID1.reset();
                     robot.PID2.reset();
@@ -435,6 +435,25 @@ void loop()
         FSM.updateTisTes();
         FSM.setState(FSM.newState);
 
+        Serial.print("LP: ");
+        Serial.print(infrared_sensors.line_position);
+
+        Serial.print(" | L_seen: ");
+        Serial.print(infrared_sensors.intersection_left_seen);
+
+        Serial.print(" R_seen: ");
+        Serial.print(infrared_sensors.intersection_right_seen);
+
+        Serial.print(" | TL: ");
+        Serial.print(infrared_sensors.turn_left);
+
+        Serial.print(" TR: ");
+        Serial.print(infrared_sensors.turn_right);
+
+        Serial.print(" | ALL: ");
+        Serial.println(infrared_sensors.all_sensors_on_line);
+
+
         // Debug prints every 25 cycles
         cycle_count++;
         if(cycle_count >= 25) {
@@ -456,6 +475,29 @@ void loop()
             Serial.println(imu.w.z);
             Serial.print("Line detected: ");
             Serial.println(infrared_sensors.line_detected);
+
+            Serial.print("values of lines sensors: ");
+            Serial.print(infrared_sensors.ir_signal[0]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_signal[1]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_signal[2]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_signal[3]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_signal[4]);
+
+            Serial.print("digital values of lines sensors: ");
+            Serial.print(infrared_sensors.ir_digital[0]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_digital[1]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_digital[2]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_digital[3]);
+            Serial.print(" ");
+            Serial.print(infrared_sensors.ir_digital[4]);
+ 
         }
     }
 }
