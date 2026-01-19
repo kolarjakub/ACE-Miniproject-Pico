@@ -9,6 +9,7 @@ enum class State
     IDLE,
     CALIBRATION_IMU,
     LINE_FOLLOW,
+    PRE_TURN_FORWARD,
     ROTATE
 };
 

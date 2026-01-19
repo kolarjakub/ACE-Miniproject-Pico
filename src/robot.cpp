@@ -33,8 +33,8 @@ robot_t::robot_t()
 {
   wheel_dist = 0.105;
   wheel_radius = 0.0689 / 2;
-  dv_max = 5;
-  dw_max = 10;
+  dv_max = 1.0f;
+  dw_max = 0.8f;
   //dv_max = 0.1f;
   //dw_max = 0.1f;
   dt = 0.04;
@@ -116,21 +116,29 @@ void robot_t::VWToMotorsVoltage(void)
 
 void robot_t::IMURead(MPU6500 mpu, imu_t &imu)
 {
-  if(mpu.update())
-  {
-    unsigned long calib_start = millis();
-    imu.dt = (calib_start - imu.cycle_time) * 1e-6; // seconds
-    imu.cycle_time = calib_start;
+    if(mpu.update())
+    {
+        unsigned long now_us = micros();
+        static unsigned long last_imu_us = 0;
+        float imu_dt = 0.0f;
 
-    imu.w.x = mpu.getGyroX();
-    imu.w.y = mpu.getGyroY();
-    imu.w.z = mpu.getGyroZ();
+        if(last_imu_us != 0) {
+            imu_dt = (now_us - last_imu_us) * 1e-6f;      // convert us -> s
+            imu.yaw += imu.w.z * DEG_TO_RAD * imu_dt;    // integrate gyro Z
+        }
+        last_imu_us = now_us;
 
-    imu.a.x = mpu.getAccX();
-    imu.a.y = mpu.getAccY();
-    imu.a.z = mpu.getAccZ();
-  }
+        // read gyro/acc
+        imu.w.x = mpu.getGyroX();
+        imu.w.y = mpu.getGyroY();
+        imu.w.z = mpu.getGyroZ();
+
+        imu.a.x = mpu.getAccX();
+        imu.a.y = mpu.getAccY();
+        imu.a.z = mpu.getAccZ();
+    }
 }
+
 
 void robot_t::LaserRangingSensorRead(laser_ranging_sensor_t &laser_ranging_sensor)
 {
@@ -191,8 +199,8 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
       infrared_sensors.ir_signal[i] = signal;
   }
 
-  infrared_sensors.ir_signal[0] = infrared_sensors.ir_digital[0] ? 1.0f : 0.0f;
-  infrared_sensors.ir_signal[4] = infrared_sensors.ir_digital[4] ? 1.0f : 0.0f;
+  infrared_sensors.ir_signal[0] = infrared_sensors.ir_digital[0];
+  infrared_sensors.ir_signal[4] = infrared_sensors.ir_digital[4];
 
   bool line_in_center = infrared_sensors.ir_signal[2] > 0.1f; // threshold can be tuned
   if (!line_in_center) {
@@ -200,24 +208,65 @@ void robot_t::InfraredSensorsRead(infrared_sensor_t &infrared_sensors)
       //return; // or handle line-lost recovery
   }
 
+  float weighted_sum=0.0f;
+  float sum=0.0f;
+
   for (int i = 1; i <= 3; i++) {
-      infrared_sensors.weighted_sum += infrared_sensors.weights[i] * infrared_sensors.ir_signal[i];
-      infrared_sensors.sum += infrared_sensors.ir_signal[i];
+      weighted_sum += infrared_sensors.weights[i] * infrared_sensors.ir_signal[i];
+      sum += infrared_sensors.ir_signal[i];
   }
 
-  if (infrared_sensors.ir_signal[0] > 0.5f && infrared_sensors.ir_signal[4] > 0.5f) { // left edge
-      infrared_sensors.weighted_sum = 0.0f;
-      infrared_sensors.sum = 0.0f;
-      infrared_sensors.line_detected = false;
-  }else if (infrared_sensors.ir_signal[0] > 0.5f) { // left edge
-      infrared_sensors.weighted_sum = -2.0f;
-      infrared_sensors.sum = 1.0f;
-  } else if (infrared_sensors.ir_signal[4] > 0.5f) { // right edge
-      infrared_sensors.weighted_sum = 2.0f;
-      infrared_sensors.sum = 1.0f;
+  
+  if (infrared_sensors.ir_digital[0] && infrared_sensors.ir_digital[4]){ // out of
+      weighted_sum = 0.0f;
+      sum = 0.0f;
+  } else if (infrared_sensors.ir_digital[0]) { // left edge
+      weighted_sum = -infrared_sensors.line_pos_saturation;
+      sum = 1.0f;
+  } else if (infrared_sensors.ir_digital[4]) { // right edge
+      weighted_sum = infrared_sensors.line_pos_saturation;
+      sum = 1.0f;
   }
 
-  infrared_sensors.line_position = (infrared_sensors.sum > 0.0f) ? (infrared_sensors.weighted_sum / infrared_sensors.sum) : 0.0f;
+  infrared_sensors.line_position = (sum > 0.0f) ? (weighted_sum / sum) : 0.0f;
+
+  
+  // Detect potential turn
+  // Edge detection for intersection
+  bool left_pattern  = infrared_sensors.ir_digital[0] &&
+                      infrared_sensors.ir_digital[1] &&
+                      infrared_sensors.ir_digital[2];
+
+  bool right_pattern = infrared_sensors.ir_digital[2] &&
+                      infrared_sensors.ir_digital[3] &&
+                      infrared_sensors.ir_digital[4];
+
+  // Latch flags for left and right
+  if (left_pattern)  infrared_sensors.intersection_left_seen  = true;
+  if (right_pattern) infrared_sensors.intersection_right_seen = true;
+
+  // Reset turn flags
+  infrared_sensors.turn_left  = 0;
+  infrared_sensors.turn_right = 0;
+
+  // Trigger left turn when we were on left intersection and now left it
+  if (infrared_sensors.intersection_left_seen && !left_pattern) {
+      infrared_sensors.turn_left = 1;
+      infrared_sensors.intersection_left_seen = false;  // reset latch
+  }
+
+  // Trigger right turn when we were on right intersection and now left it
+  if (infrared_sensors.intersection_right_seen && !right_pattern) {
+      infrared_sensors.turn_right = 1;
+      infrared_sensors.intersection_right_seen = false; // reset latch
+  }
+
+  if(infrared_sensors.turn_left && infrared_sensors.turn_right){
+    infrared_sensors.turn_left = 0;
+    infrared_sensors.turn_right = 0;
+    infrared_sensors.all_sensors_on_line = 1;
+  }
+
   /*
   Serial.print("Line position: ");
   Serial.println(infrared_sensors.line_position);

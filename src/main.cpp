@@ -19,19 +19,11 @@ RPI_PICO_Timer ITimer1(1);
 #define ENC2_A 9
 #define ENC2_B 8
 
-/*
-#define MOTOR1A_PIN 7
-#define MOTOR1B_PIN 6
-
-#define MOTOR2A_PIN 5
-#define MOTOR2B_PIN 4
-*/
 #define MOTOR1A_PIN 5
 #define MOTOR1B_PIN 4
 
 #define MOTOR2A_PIN 6
 #define MOTOR2B_PIN 7
-
 
 
 #define IR1_pin 22
@@ -115,7 +107,6 @@ void read_encoders(void)
 
 // PWM stuff
 
-
 #include "robot.h"
 #include "fsm.h"
 
@@ -137,7 +128,7 @@ float angular_correction;
 
 void setMotorPWM(int new_PWM, int pin_a, int pin_b)
 {
-  int PWM_max = 200;
+  int PWM_max = 50;
   if (new_PWM >  PWM_max) new_PWM =  PWM_max;
   if (new_PWM < -PWM_max) new_PWM = -PWM_max;
   
@@ -153,9 +144,19 @@ void setMotorPWM(int new_PWM, int pin_a, int pin_b)
   }
 }
 
+// Rotate robot to the nearest pi/4 angle relative to current yaw
+void rotateToNearestPiOver4(float relative_angle_rad)
+{
+    // Calculate target absolute angle
+    float target_angle = imu.yaw + relative_angle_rad;
+
+    // Round to nearest multiple of pi/4
+    float nearest_pi4 = round(target_angle / (PI/4.0f)) * (PI/4.0f);
+
+    imu.yaw_target = nearest_pi4;
+}
 
 // Remote commands
-
 unsigned long interval, last_cycle;
 unsigned long loop_micros;
 
@@ -287,29 +288,14 @@ void setup()
   robot.dt = 1e-3 * interval; // In seconds
   robot.PID1.dt = robot.dt;
   robot.PID2.dt = robot.dt;
-  robot.dv_max = 0.3f; // m/s every cycle
-  robot.dw_max = 0.3f; // m/s every cycle
+  robot.dv_max = 0.8f; // m/s every cycle
+  robot.dw_max = 0.8f; // m/s every cycle
 
-  /*
-  // Configure line-following PID (PD mode)
-  robot.PID1.Kp = 40.0f;  // proportional gain
-  robot.PID1.Ki = 2.5f; 
-  robot.PID1.Kd = 0.0f;  // derivative gain
-  robot.PID1.Kf = 10.0f;  // no feedforward
-  robot.PID1.dt = robot.dt;
-  
-  // Configure line-following PID (PD mode)
-  robot.PID2.Kp = 40.0f;  // proportional gain
-  robot.PID2.Ki = 2.5f;
-  robot.PID2.Kd = 0.0f;  // derivative gain
-  robot.PID2.Kf = 10.0f;  // no feedforward
-  robot.PID2.dt = robot.dt;
-*/
 
   // Configure line-following PID (PD mode)
-  lineFollowerPID.Kp = 0.02f;  // proportional gain
+  lineFollowerPID.Kp = 0.15f;  // proportional gain
   lineFollowerPID.Ki = 0.0f;  // disable integral
-  lineFollowerPID.Kd = 0.07f;  // derivative gain
+  lineFollowerPID.Kd = 0.03f;  // derivative gain
   lineFollowerPID.Kf = 0.0f;  // no feedforward
   lineFollowerPID.dt = robot.dt;
   
@@ -356,21 +342,11 @@ void loop()
     robot.setRobotVW(robot.v_req, robot.w_req);
     robot.accelerationLimit();
 
-    robot.v = robot.v_req;
-    robot.w = robot.w_req;
-    robot.VWToMotorsVoltage();
 
-    setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
-    setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
 
     robot.IMURead(mpu, imu);
     robot.InfraredSensorsRead(infrared_sensors);
     robot.LaserRangingSensorRead(laser_ranging_sensor);
-
-    // Control the robot here by choosing:
-    //   v_req and w_req          when robot.control_mode = cm_pid
-    //   PWM_1_req and PWM_1_req  when robot.control_mode = cm_pwm
-    // ...
 
 
     // ================= FSM handling ===================== //
@@ -383,23 +359,127 @@ void loop()
         break;
 
       case State::CALIBRATION_IMU:
-        mpu.calibrateAccelGyro();
-        robot.PID1.reset();
-        robot.PID2.reset();
-        lineFollowerPID.reset();
-        FSM.newState = State::LINE_FOLLOW;
-        break;
+          mpu.calibrateAccelGyro();
+
+          // Reset PIDs
+          robot.PID1.reset();
+          robot.PID2.reset();
+          lineFollowerPID.reset();
+
+          // Set reference yaw after calibration
+          imu.yaw = 0.0f;        // IMU integrated yaw
+          imu.yaw_ref = 0.0f;    // define this as the "zero" reference
+          imu.yaw_target = 0.0f; // start target same as reference
+
+          FSM.newState = State::LINE_FOLLOW;
+          break;
 
       case State::LINE_FOLLOW:
-        angular_correction = lineFollowerPID.calc(0.0f, infrared_sensors.line_position);
-        //robot.setRobotVW(VELOCITY_BASE, -angular_correction);
-        robot.setRobotVW(VELOCITY_BASE, 0.0f);
-        break;
+      {
+          // If a turn is detected, start moving forward for 8 cm before rotation
+          if(infrared_sensors.turn_left || infrared_sensors.turn_right)
+          {
+              // Save the turn direction (-1 = left, +1 = right)
+              robot.turn_direction = infrared_sensors.turn_left ? -1 : 1;
+
+              // Reset the relative distance counter
+              robot.rel_s = 0.0f;
+
+              // Set the distance to move forward before rotating (meters)
+              robot.turn_distance_remaining = -0.08f;
+
+              // Clear turn detection flags
+              infrared_sensors.turn_left = 0;
+              infrared_sensors.turn_right = 0;
+
+              // Enter PRE_TURN_FORWARD state
+              FSM.newState = State::PRE_TURN_FORWARD;
+          }
+          else
+          {
+              // Normal line following
+              angular_correction = lineFollowerPID.calc(0.0f, infrared_sensors.line_position);
+              robot.setRobotVW(VELOCITY_BASE, angular_correction);
+              robot.accelerationLimit();
+          }
+          break;
+      }
+      case State::PRE_TURN_FORWARD:
+      {
+          // Move forward until the relative distance reaches the target
+          if(robot.rel_s > robot.turn_distance_remaining)
+          {
+              // Go straight, no line following
+              robot.setRobotVW(VELOCITY_BASE, 0.0f);
+              robot.accelerationLimit();
+              Serial.print(" robot.rel_s: ");
+              Serial.println(robot.rel_s);
+              Serial.print(" robot.turn_distance_remaining: ");
+              Serial.println(robot.turn_distance_remaining);
+          }
+          else
+          {
+              // Forward distance complete, start rotation
+              rotateToNearestPiOver4(robot.turn_direction * (M_PI/2.0f));
+
+              // Reset the forward distance
+              robot.turn_distance_remaining = 0.0f;
+              robot.turn_direction = 0;
+
+              FSM.newState = State::ROTATE;
+          }
+          break;
+      }
 
       case State::ROTATE:
-        break;
+      {
+          // Calculate error between target and current yaw
+          float angle_error = imu.yaw-imu.yaw_target;
+
+          // Normalize error to [-pi, pi]
+          while(angle_error > PI)  angle_error -= 2.0f * PI;
+          while(angle_error < -PI) angle_error += 2.0f * PI;
+
+          // P control for angular velocity
+          float w_rotate = 20.0f * angle_error;
+
+          // Limit angular speed
+          w_rotate = constrain(w_rotate, -robot.dw_max, robot.dw_max);
+
+          // Command robot: no linear motion, rotate only
+          robot.setRobotVW(0.0f, w_rotate);
+          robot.accelerationLimit();
+          
+          constexpr float ROTATE_ANGLE_TOLERANCE = 5.0f * DEG_TO_RAD;
+
+          // Check if rotation is complete
+          if(fabs(angle_error) < ROTATE_ANGLE_TOLERANCE) {
+              robot.setRobotVW(0.0f, 0.0f);  // stop motors
+              imu.yaw = imu.yaw_ref;        // IMU integrated yaw
+              // Reset PIDs
+              robot.PID1.reset();
+              robot.PID2.reset();
+              lineFollowerPID.reset();
+              FSM.newState = State::LINE_FOLLOW;  // back to line following
+          }
+          Serial.print(" angle error: ");
+          Serial.println(angle_error);
+          Serial.print(" imu yaw: ");
+          Serial.println(imu.yaw);
+          Serial.print(" imu yaw target: ");
+          Serial.println(imu.yaw_target);
+          break;
+      }
 
     }
+
+    robot.v = robot.v_req;
+    robot.w = robot.w_req;
+    robot.VWToMotorsVoltage();
+    setMotorPWM(robot.PWM_1, MOTOR1A_PIN, MOTOR1B_PIN);
+    setMotorPWM(robot.PWM_2, MOTOR2A_PIN, MOTOR2B_PIN);
+
+
     
     // ================= End of FSM handling ===================== //
 
@@ -464,6 +544,14 @@ void loop()
       Serial.print(serial_commands.frame.command);
       Serial.print(" loop: ");
       Serial.println(micros() - loop_micros);
+      
+      Serial.print("IR digital: ");
+      for (int k = 0; k < 5; k++) {
+        Serial.print(infrared_sensors.ir_digital[k]);
+        if (k < 4) Serial.print(" ");
+      }
+      Serial.println();
+
     }
   }
     

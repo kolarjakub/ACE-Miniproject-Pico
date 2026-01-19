@@ -56,7 +56,9 @@ typedef struct{
   Vec3f a;
   uint32_t cycle_time, last_cycle_time;
   uint32_t dt; // IMU cycle tracking
-  float roll, pitch, yaw;  // Euler angles from Madgwick filter
+  float yaw = 0.0f;        // integrated yaw angle [rad]
+  float yaw_ref = 0.0f;    // reference yaw after calibration
+  float yaw_target = 0.0f;
 }imu_t;
 
 typedef struct{
@@ -68,10 +70,11 @@ typedef struct{
   int weights[5] = { 0, -1, 0, 1, 0}; // Váhy pro výpočet polohy čáry
   uint8_t pins[5];
   float ir_signal[5];
-  float weighted_sum;
-  float sum;
   float line_position;
   bool line_detected;
+  const float line_pos_saturation = 2.0f;
+  bool turn_left=0, turn_right=0, all_sensors_on_line=0;
+  bool intersection_left_seen=0, intersection_right_seen=0;
 } infrared_sensor_t;
 
 class robot_t {
@@ -101,6 +104,9 @@ class robot_t {
   
   PID_t PID1, PID2;
   float battery_voltage;
+
+  float turn_distance_remaining; // Distance to move forward before rotation [m]
+  int turn_direction;           // Direction of the turn: -1 = left, +1 = right, 0 = none
   
   robot_t();
 
