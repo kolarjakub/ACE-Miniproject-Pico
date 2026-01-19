@@ -293,9 +293,9 @@ void setup()
 
 
   // Configure line-following PID (PD mode)
-  lineFollowerPID.Kp = 0.15f;  // proportional gain
+  lineFollowerPID.Kp = 0.30f;  // proportional gain
   lineFollowerPID.Ki = 0.0f;  // disable integral
-  lineFollowerPID.Kd = 0.03f;  // derivative gain
+  lineFollowerPID.Kd = 0.06f;  // derivative gain
   lineFollowerPID.Kf = 0.0f;  // no feedforward
   lineFollowerPID.dt = robot.dt;
   
@@ -375,102 +375,9 @@ void loop()
           break;
 
       case State::LINE_FOLLOW:
-      {
-          // If a turn is detected, start moving forward for 8 cm before rotation
-          if(infrared_sensors.turn_left || infrared_sensors.turn_right)
-          {
-              // Save the turn direction (-1 = left, +1 = right)
-              robot.turn_direction = infrared_sensors.turn_left ? -1 : 1;
-
-              // Reset the relative distance counter
-              robot.rel_s = 0.0f;
-
-              // Set the distance to move forward before rotating (meters)
-              robot.turn_distance_remaining = -0.08f;
-
-              // Clear turn detection flags
-              infrared_sensors.turn_left = 0;
-              infrared_sensors.turn_right = 0;
-
-              // Enter PRE_TURN_FORWARD state
-              FSM.newState = State::PRE_TURN_FORWARD;
-          }
-          else
-          {
-              // Normal line following
-              angular_correction = lineFollowerPID.calc(0.0f, infrared_sensors.line_position);
-              robot.setRobotVW(VELOCITY_BASE, angular_correction);
-              robot.accelerationLimit();
-          }
-          break;
-      }
-      case State::PRE_TURN_FORWARD:
-      {
-          // Move forward until the relative distance reaches the target
-          if(robot.rel_s > robot.turn_distance_remaining)
-          {
-              // Go straight, no line following
-              robot.setRobotVW(VELOCITY_BASE, 0.0f);
-              robot.accelerationLimit();
-              Serial.print(" robot.rel_s: ");
-              Serial.println(robot.rel_s);
-              Serial.print(" robot.turn_distance_remaining: ");
-              Serial.println(robot.turn_distance_remaining);
-          }
-          else
-          {
-              // Forward distance complete, start rotation
-              rotateToNearestPiOver4(robot.turn_direction * (M_PI/2.0f));
-
-              // Reset the forward distance
-              robot.turn_distance_remaining = 0.0f;
-              robot.turn_direction = 0;
-
-              FSM.newState = State::ROTATE;
-          }
-          break;
-      }
-
-      case State::ROTATE:
-      {
-          // Calculate error between target and current yaw
-          float angle_error = imu.yaw-imu.yaw_target;
-
-          // Normalize error to [-pi, pi]
-          while(angle_error > PI)  angle_error -= 2.0f * PI;
-          while(angle_error < -PI) angle_error += 2.0f * PI;
-
-          // P control for angular velocity
-          float w_rotate = 20.0f * angle_error;
-
-          // Limit angular speed
-          w_rotate = constrain(w_rotate, -robot.dw_max, robot.dw_max);
-
-          // Command robot: no linear motion, rotate only
-          robot.setRobotVW(0.0f, w_rotate);
+          angular_correction = lineFollowerPID.calc(0.0f, infrared_sensors.line_position);
+          robot.setRobotVW(VELOCITY_BASE, angular_correction);
           robot.accelerationLimit();
-          
-          constexpr float ROTATE_ANGLE_TOLERANCE = 5.0f * DEG_TO_RAD;
-
-          // Check if rotation is complete
-          if(fabs(angle_error) < ROTATE_ANGLE_TOLERANCE) {
-              robot.setRobotVW(0.0f, 0.0f);  // stop motors
-              imu.yaw = imu.yaw_ref;        // IMU integrated yaw
-              // Reset PIDs
-              robot.PID1.reset();
-              robot.PID2.reset();
-              lineFollowerPID.reset();
-              FSM.newState = State::LINE_FOLLOW;  // back to line following
-          }
-          Serial.print(" angle error: ");
-          Serial.println(angle_error);
-          Serial.print(" imu yaw: ");
-          Serial.println(imu.yaw);
-          Serial.print(" imu yaw target: ");
-          Serial.println(imu.yaw_target);
-          break;
-      }
-
     }
 
     robot.v = robot.v_req;
